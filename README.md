@@ -127,6 +127,8 @@ The launcher also:
 - uses `NAT`
 - fixes duplicate copied-VDI UUID conflicts automatically
 
+On Linux, VirtualBox `NAT` not showing a host adapter dropdown is normal. That dropdown only appears for `Bridged Adapter` mode.
+
 Recommended pair:
 
 ```text
