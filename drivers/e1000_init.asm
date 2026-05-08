@@ -55,6 +55,8 @@ e1000_init:
     add rax, 127
     and rax, -128           ; Align to nearest 128-byte boundary
     mov [heap_current], rax
+    mov qword [rx_curr], 0
+    mov qword [tx_tail], 0
 
     ; [5] Setup RX Descriptor Table
     mov rax, [heap_current]

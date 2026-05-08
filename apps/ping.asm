@@ -5,6 +5,10 @@
 cmd_ping db "ping", 0
 
 do_ping:
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
+
     lea rsi, [msg_pinging]
     call print_string
     call newline

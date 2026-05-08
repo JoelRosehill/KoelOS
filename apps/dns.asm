@@ -2,14 +2,15 @@ global cmd_dns, do_dns
 cmd_dns db "dns", 0
 
 do_dns:
-    test rsi, rsi
-    jz .done
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
 
-    add rsi, 3                  
+    lea rsi, [arg_buffer]
 .skip_spaces:
     mov al, [rsi]
-    cmp al, 0                   
-    je .next_char
+    test al, al
+    jz .done
     cmp al, 32                  
     je .next_char
     jmp .found_arg              

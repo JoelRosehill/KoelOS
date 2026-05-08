@@ -1,5 +1,5 @@
 [bits 64]
-[org 0x8000]
+[org 0x10000]
 default rel             ; Use RIP-relative addressing for stability
 
 _start:
@@ -159,7 +159,4 @@ keymap:
     times 128 db 0
 
 ; --- AUTO-GENERATED APP TABLE ---
-%include "generated_apps.asm"
-
-; Floppy Padding
-times 1474048 - ($ - $$) db 0
+%include "build/generated_apps.asm"

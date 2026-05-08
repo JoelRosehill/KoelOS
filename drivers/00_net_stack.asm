@@ -152,7 +152,7 @@ msg_icmp_reply   db "[ICMP] Echo Reply received! (SUCCESS)", 0
 msg_dhcp_success db "[DHCP] Success! IP Assigned: ", 0
 msg_udp_found    db "[NET] UDP Packet to unknown port: 0x", 0
 
-dns_server_ip    dd 0x0302000A   ; 10.0.2.3
+dns_server_ip    dd 0x0302000A   ; 10.0.2.3 (VBox NAT DNS)
 dns_resolved_ip  dd 0
 msg_dns_look     db "[DNS] Looking up: ", 0
 msg_dns_wait     db "[DNS] Query sent. Waiting...", 0
@@ -373,33 +373,75 @@ dns_build_query:
 
 dns_handle_reply:
     push rax
+    push rbx
+    push rcx
+    push rdx
     push rsi
 
+    movzx ecx, word [rsi + 6]
+    xchg cl, ch
+    test ecx, ecx
+    jz .done_dns
+
     add rsi, 12
+    call dns_skip_name
+    add rsi, 4
 
-.skip_name:
-    movzx rax, byte [rsi]
-    test al, al
-    jz .name_done
-    inc rsi
-    add rsi, rax
-    jmp .skip_name
+.answer_loop:
+    test ecx, ecx
+    jz .done_dns
 
-.name_done:
-    add rsi, 5
-    cmp byte [rsi], 0xC0
-    jne .done_dns
-    add rsi, 2
-    add rsi, 8
-    
-    lodsw 
-    cmp ax, 0x0400
-    jne .done_dns
+    call dns_skip_name
+
+    mov bx, [rsi]
+    xchg bl, bh
+    mov dx, [rsi + 2]
+    xchg dl, dh
+    mov ax, [rsi + 8]
+    xchg al, ah
+
+    add rsi, 10
+
+    cmp bx, 1
+    jne .skip_rdata
+    cmp dx, 1
+    jne .skip_rdata
+    cmp ax, 4
+    jne .skip_rdata
 
     mov eax, [rsi]
     mov [dns_resolved_ip], eax
+    jmp .done_dns
+
+.skip_rdata:
+    movzx eax, ax
+    add rsi, rax
+    dec ecx
+    jmp .answer_loop
 
 .done_dns:
     pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
     pop rax
+    ret
+
+dns_skip_name:
+.skip_label:
+    movzx eax, byte [rsi]
+    test al, al
+    jz .done_zero
+    cmp al, 0xC0
+    jae .done_ptr
+    inc rsi
+    add rsi, rax
+    jmp .skip_label
+
+.done_zero:
+    inc rsi
+    ret
+
+.done_ptr:
+    add rsi, 2
     ret

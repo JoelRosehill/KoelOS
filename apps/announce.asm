@@ -2,6 +2,10 @@
 cmd_announce db "announce", 0
 
 do_announce:
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
+
     lea rsi, [msg_ann]
     call print_string
     call newline

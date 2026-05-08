@@ -31,6 +31,7 @@ http_send_get:
 
     ; [1] Allocate dynamic buffer & ZERO IT
     mov rdi, [heap_current]
+    add rdi, 512                ; Keep request text away from TCP packet scratch space
     push rdi
     push rcx
     mov rcx, 100
@@ -138,8 +139,12 @@ http_debug:
 ; ------------------------------------------------------------------------------
 http_parse_and_print:
     push rax
+    push rbx
     push rcx
+    push rdx
     push rsi
+    push r8
+    push r9
 
     mov rsi, [tcp_payload_ptr]
     mov rcx, [tcp_payload_len]
@@ -171,10 +176,48 @@ http_parse_and_print:
     add rsi, 4
     sub rcx, 4
 
+    mov rdx, rsi
+    mov rbx, rcx
+.search_html_body:
+    cmp rbx, 5
+    jl .print_raw
+    cmp byte [rdx], '<'
+    jne .next_body_char
+    cmp byte [rdx+1], 'b'
+    jne .next_body_char
+    cmp byte [rdx+2], 'o'
+    jne .next_body_char
+    cmp byte [rdx+3], 'd'
+    jne .next_body_char
+    cmp byte [rdx+4], 'y'
+    jne .next_body_char
+
+.skip_body_tag:
+    cmp rbx, 0
+    je .print_raw
+    mov al, [rdx]
+    inc rdx
+    dec rbx
+    cmp al, '>'
+    jne .skip_body_tag
+    mov rsi, rdx
+    mov rcx, rbx
+    jmp .print_raw
+
+.next_body_char:
+    inc rdx
+    dec rbx
+    jmp .search_html_body
+
 .print_raw:
-    mov r8, 0                   ; State 0=Text, 1=In <tag>
+    xor r8d, r8d                ; State 0=Text, 1=In <tag>
+    xor r9d, r9d                ; Newline requested after tag
+    xor ebx, ebx                ; 0=normal, 1=space, 2=newline
 
 .print_loop:
+    test rcx, rcx
+    jz .finish
+
     mov al, [rsi]
     cmp al, '<'
     je .enter_tag
@@ -184,9 +227,19 @@ http_parse_and_print:
     cmp r8, 1
     je .skip_char
 
+    cmp al, ' '
+    je .print_space_char
     cmp al, 32
     jl .special_check
-    
+
+    mov bl, 0
+    call print_char
+    jmp .skip_char
+
+.print_space_char:
+    cmp bl, 0
+    jne .skip_char
+    mov bl, 1
     call print_char
     jmp .skip_char
 
@@ -194,28 +247,96 @@ http_parse_and_print:
     cmp al, 10
     je .do_nl
     cmp al, 13
-    jne .skip_char
+    je .skip_char
+    jmp .skip_char
+
 .do_nl:
+    cmp bl, 2
+    je .skip_char
     call print_char
+    mov bl, 2
 
     jmp .skip_char
 
 .enter_tag:
-    mov r8, 1
+    mov r8b, 1
+    xor r9d, r9d
+
+    cmp rcx, 2
+    jl .skip_char
+    cmp byte [rsi+1], 'p'
+    je .tag_needs_newline
+    cmp byte [rsi+1], 'b'
+    je .tag_maybe_b
+    cmp byte [rsi+1], 'd'
+    je .tag_maybe_div
+    cmp byte [rsi+1], 'h'
+    je .tag_needs_newline
+    cmp byte [rsi+1], 'l'
+    je .tag_needs_newline
+    cmp byte [rsi+1], '/'
+    jne .skip_char
+    cmp rcx, 3
+    jl .skip_char
+    cmp byte [rsi+2], 'p'
+    je .tag_needs_newline
+    cmp byte [rsi+2], 'b'
+    je .tag_needs_newline
+    cmp byte [rsi+2], 'd'
+    je .tag_needs_newline
+    cmp byte [rsi+2], 'h'
+    je .tag_needs_newline
+    cmp byte [rsi+2], 'l'
+    je .tag_needs_newline
     jmp .skip_char
+
+.tag_maybe_b:
+    cmp rcx, 3
+    jl .skip_char
+    cmp byte [rsi+2], 'r'
+    je .tag_needs_newline
+    jmp .skip_char
+
+.tag_maybe_div:
+    cmp rcx, 4
+    jl .skip_char
+    cmp byte [rsi+2], 'i'
+    jne .skip_char
+    cmp byte [rsi+3], 'v'
+    jne .skip_char
+
+.tag_needs_newline:
+    mov r9b, 1
+    jmp .skip_char
+
 .exit_tag:
-    mov r8, 0
+    mov r8b, 0
+    cmp r9b, 1
+    jne .skip_char
+    cmp bl, 2
+    je .after_tag_nl
+    call newline
+.after_tag_nl:
+    mov bl, 2
+    xor r9d, r9d
 
 .skip_char:
     inc rsi
     dec rcx
-    jnz .print_loop
+    jmp .print_loop
 
+.finish:
+    cmp bl, 2
+    je .done
     call newline
 
 .done:
+    pop r9
+    pop r8
     pop rsi
+    pop rdx
     pop rcx
+    pop rbx
     pop rax
     ret
 

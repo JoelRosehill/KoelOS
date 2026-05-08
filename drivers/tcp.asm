@@ -23,6 +23,16 @@ tcp_connect:
     push rsi
     push rdi
 
+    add word [tcp_local_port], 1
+    jne .port_ready
+    mov word [tcp_local_port], 0xC000
+.port_ready:
+
+    add dword [tcp_seq_num], 0x1000
+    mov dword [tcp_ack_num], 0
+    mov qword [tcp_payload_ptr], 0
+    mov qword [tcp_payload_len], 0
+
     mov [tcp_target_ip], edx
     mov [tcp_target_port], bx
     mov byte [tcp_state], 1     
@@ -128,9 +138,7 @@ tcp_handle_packet:
     mov byte [tcp_state], 3     
 
     mov eax, [tcp_ack_num]
-    bswap eax
     add eax, ecx                
-    bswap eax
     mov [tcp_ack_num], eax
     call tcp_send_ack           
     

@@ -1,6 +1,14 @@
 [bits 16]
 [org 0x7c00]
 
+%ifndef KERNEL_SECTORS
+%define KERNEL_SECTORS 63
+%endif
+
+%define KERNEL_LOAD_SEG 0x1000
+%define KERNEL_LOAD_OFF 0x0000
+%define KERNEL_ENTRY    0x10000
+
 ; --- BOOTLOADER START ---
 start:
     xor ax, ax
@@ -8,15 +16,12 @@ start:
     mov es, ax
     mov ss, ax
     mov sp, 0x7c00          ; Temporary 16-bit stack
+    mov [boot_drive], dl
 
     ; [1] Load Kernel from Disk
-    ; Loading 64 sectors (32KB) starting from sector 2
-    mov ah, 0x02            
-    mov al, 64              
-    mov ch, 0               
-    mov dh, 0               
-    mov cl, 2               
-    mov bx, 0x8000          ; Kernel entry point
+    mov si, disk_address_packet
+    mov dl, [boot_drive]
+    mov ah, 0x42
     int 0x13
     jc disk_error           
 
@@ -101,7 +106,16 @@ init_64:
     mov rbp, rsp
 
     ; Jump to Kernel entry point
-    jmp 0x8000               
+    jmp KERNEL_ENTRY
+
+boot_drive db 0
+
+disk_address_packet:
+    db 0x10, 0x00
+    dw KERNEL_SECTORS
+    dw KERNEL_LOAD_OFF
+    dw KERNEL_LOAD_SEG
+    dq 1
 
 times 510-($-$$) db 0
 dw 0xAA55

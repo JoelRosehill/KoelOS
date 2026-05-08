@@ -5,6 +5,7 @@ cmd_fetch db "fetch", 0
 
 fetch_domain dq 0
 fetch_path   dq 0
+fetch_target_ip dd 0
 default_path db "/", 0
 
 msg_fetch_start db "[FETCH] Connecting to: ", 0
@@ -17,10 +18,11 @@ msg_http_rx_head db "==== HTTP RECEIVED DATA (Parsed) ====", 13, 10, 0
 msg_http_fin    db "[HTTP] Final Data received. Stream Complete.", 0
 
 do_fetch:
-    test rsi, rsi
-    jz .done
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
 
-    add rsi, 5                  
+    lea rsi, [arg_buffer]
 .skip_spaces:
     mov al, [rsi]
     test al, al
@@ -39,6 +41,7 @@ do_fetch:
     ; Setup default path "/"
     lea rbx, [default_path]
     mov [fetch_path], rbx
+    mov dword [fetch_target_ip], 0
 
     ; Sanitize domain for trailing spaces
 .strip_loop:
@@ -55,6 +58,11 @@ do_fetch:
     mov rsi, [fetch_domain]
     call print_string
     call newline
+
+    mov rsi, [fetch_domain]
+    call parse_ipv4_literal
+    test rax, rax
+    jnz .direct_ip
 
     ; Trigger DNS resolution
     mov rdi, [heap_current]
@@ -111,6 +119,12 @@ do_fetch:
 
 .dns_success:
     mov edx, [dns_resolved_ip]
+    jmp .tcp_connect
+
+.direct_ip:
+    mov edx, [fetch_target_ip]
+
+.tcp_connect:
     mov bx, 80                  
     call tcp_connect
 
@@ -205,3 +219,86 @@ do_fetch:
 
 .done:
     jmp command_done
+
+parse_ipv4_literal:
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+
+    xor edx, edx
+    xor ecx, ecx
+
+.next_octet:
+    mov bl, [rsi]
+    cmp bl, '0'
+    jb .fail
+    cmp bl, '9'
+    ja .fail
+
+    xor eax, eax
+
+.digit_loop:
+    mov bl, [rsi]
+    cmp bl, '0'
+    jb .digits_done
+    cmp bl, '9'
+    ja .digits_done
+    imul eax, eax, 10
+    movzx ebx, bl
+    sub ebx, '0'
+    add eax, ebx
+    cmp eax, 255
+    ja .fail
+    inc rsi
+    jmp .digit_loop
+
+.digits_done:
+    cmp ecx, 0
+    je .store_octet0
+    cmp ecx, 1
+    je .store_octet1
+    cmp ecx, 2
+    je .store_octet2
+    shl eax, 24
+    or edx, eax
+    jmp .check_last
+
+.store_octet0:
+    or edx, eax
+    jmp .check_sep
+
+.store_octet1:
+    shl eax, 8
+    or edx, eax
+    jmp .check_sep
+
+.store_octet2:
+    shl eax, 16
+    or edx, eax
+
+.check_sep:
+    cmp byte [rsi], '.'
+    jne .fail
+    inc rsi
+    inc ecx
+    cmp ecx, 4
+    jl .next_octet
+    jmp .fail
+
+.check_last:
+    cmp byte [rsi], 0
+    jne .fail
+    mov [fetch_target_ip], edx
+    mov eax, 1
+    jmp .done_parse
+
+.fail:
+    xor eax, eax
+
+.done_parse:
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret

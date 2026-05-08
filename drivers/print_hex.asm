@@ -30,3 +30,18 @@ print_hex_byte:
 .is_digit:
     add al, '0'
     ret
+
+; Input: EAX = 32-bit value to print in hex
+print_hex_32:
+    push rcx
+    push rax
+    mov rcx, 4
+.loop_32:
+    rol eax, 8
+    push rax
+    call print_hex_byte
+    pop rax
+    loop .loop_32
+    pop rax
+    pop rcx
+    ret

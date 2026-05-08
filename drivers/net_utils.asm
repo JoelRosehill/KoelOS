@@ -40,3 +40,30 @@ print_ip:
     pop rbx
     pop rax
     ret
+
+ensure_nic_ready:
+    push rsi
+
+    cmp qword [nic_mem_base], 0
+    jne .ready
+
+    call find_nic
+    test rax, rax
+    jz .not_found
+
+    call e1000_init
+
+.ready:
+    mov rax, 1
+    pop rsi
+    ret
+
+.not_found:
+    lea rsi, [msg_net_missing]
+    call print_string
+    call newline
+    xor rax, rax
+    pop rsi
+    ret
+
+msg_net_missing db "[NET] Error: No supported network hardware found.", 0

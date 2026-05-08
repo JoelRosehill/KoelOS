@@ -5,6 +5,10 @@
 cmd_dhcp db "dhcp", 0
 
 do_dhcp:
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
+
     lea rsi, [msg_dhcp_start]
     call print_string
     call newline

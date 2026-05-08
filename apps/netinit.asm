@@ -49,21 +49,6 @@ do_netinit:
     call newline
     jmp command_done
 
-; --- Local Helper: Print EAX as 8 Hex Digits ---
-print_hex_32:
-    push rcx
-    push rax
-    mov rcx, 4              
-.loop:
-    rol eax, 8              
-    push rax
-    call print_hex_byte     
-    pop rax
-    loop .loop
-    pop rax
-    pop rcx
-    ret
-
 ; --- Messages (Unique Prefixes) ---
 net_msg_searching db "Searching PCI bus for Intel E1000...", 0
 net_msg_debug_bar db "NIC BAR0 Address Found: 0x", 0

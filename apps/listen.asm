@@ -5,6 +5,10 @@
 cmd_listen db "listen", 0
 
 do_listen:
+    call ensure_nic_ready
+    test rax, rax
+    jz command_done
+
     lea rsi, [msg_listen_start]
     call print_string
     call newline
