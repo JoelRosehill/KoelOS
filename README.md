@@ -28,6 +28,7 @@ KoelOS is a solo-built operating system project focused on direct control over t
 - Small network stack with ARP, IPv4, ICMP, UDP, DNS, TCP, and HTTP pieces
 - `browser <domain>` command that renders text-only pages in the terminal
 - Metal and VirtualBox build targets with separate output directories
+- Linux-tested VirtualBox support with a portable `.vdi` launcher script
 
 ## Commands
 
@@ -69,6 +70,7 @@ ifconfig
 │   ├── metal/      # raw BIOS disk image and binaries
 │   └── vbox/       # VirtualBox disk image
 ├── docs/
+├── launch_koelos_vdi.sh  # portable VirtualBox launcher for a local VDI copy
 ├── boot.asm        # boot sector + transition to long mode
 ├── kernel.asm      # shell entry point and global state
 ├── build_metal.sh  # build a raw BIOS disk image for real hardware
@@ -101,6 +103,38 @@ Output:
 dist/vbox/koelOS.vdi
 ```
 
+## Portable VDI Launch
+
+If you just want to run a downloaded `KoelOS.vdi`, use the portable launcher:
+
+```bash
+bash launch_koelos_vdi.sh
+```
+
+It looks for:
+
+- `./KoelOS.vdi`
+- `./koelOS.vdi`
+- `./dist/vbox/KoelOS.vdi`
+- `./dist/vbox/koelOS.vdi`
+
+This means you can drop both files into a folder like `Downloads/` and launch KoelOS directly from there.
+
+The launcher also:
+
+- creates a local VirtualBox VM profile automatically
+- forces the KoelOS-compatible NIC settings
+- uses `NAT`
+- fixes duplicate copied-VDI UUID conflicts automatically
+
+Recommended pair:
+
+```text
+Downloads/
+├── KoelOS.vdi
+└── launch_koelos_vdi.sh
+```
+
 ## Real Hardware
 
 KoelOS now builds into a BIOS-bootable raw disk image for USB/HDD boot on a real machine.
@@ -128,6 +162,7 @@ That means:
 - shell boot on real hardware is the target
 - networking on real hardware is not universal yet
 - VirtualBox `NAT` is currently the best-supported environment for the browser and network stack
+- VirtualBox on Linux is now supported with the bundled `launch_koelos_vdi.sh` flow
 
 ## Why It Exists
 
@@ -141,6 +176,7 @@ Working right now:
 
 - boots to shell
 - runs in VirtualBox
+- launches from a copied `.vdi` on Linux through the portable launcher
 - builds a raw metal image
 - resolves DNS
 - performs HTTP GET requests
