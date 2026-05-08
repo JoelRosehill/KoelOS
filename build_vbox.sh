@@ -43,9 +43,11 @@ if ! VBoxManage showvminfo "$VM_NAME" >/dev/null 2>&1; then
     log_info "First run detected! Creating VM '$VM_NAME'..."
     VBoxManage createvm --name "$VM_NAME" --ostype "Other_64" --register >/dev/null
     VBoxManage modifyvm "$VM_NAME" --memory 512 --vram 16 --boot1 disk
-    VBoxManage modifyvm "$VM_NAME" --nic1 nat --nictype1 82540EM --nicpromisc1 allow-all --macaddress1 525400123456
     VBoxManage storagectl "$VM_NAME" --name "IDE Controller" --add ide
 fi
+
+log_info "Applying KoelOS VM network profile..."
+VBoxManage modifyvm "$VM_NAME" --nic1 nat --nictype1 82540EM --nicpromisc1 allow-all --macaddress1 525400123456 --cableconnected1 on
 
 log_info "Attaching drive to VM..."
 VBoxManage storageattach "$VM_NAME" --storagectl "IDE Controller" --port 0 --device 0 --type hdd --medium "$VDI_FILE"
