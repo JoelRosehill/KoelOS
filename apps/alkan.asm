@@ -123,7 +123,7 @@ basic_handle_repl_line:
     jmp .done
 
 .help:
-    call basic_print_help
+    call basic_print_help_command
     jmp .done
 
 .list:
@@ -178,7 +178,115 @@ basic_handle_repl_line:
     ret
 
 basic_print_help:
+    call basic_print_help_page_1
+    call basic_help_wait_more
+    test eax, eax
+    jz .done
+
+    call basic_print_help_page_2
+    call basic_help_wait_more
+    test eax, eax
+    jz .done
+
+    call basic_print_help_page_3
+    call basic_help_wait_more
+    test eax, eax
+    jz .done
+
+    call basic_print_help_page_4
+    call basic_help_wait_done
+
+.done:
+    ret
+
+basic_print_help_command:
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    je basic_print_help
+
+    lea rdi, [kw_editor]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_1
+
+    lea rdi, [kw_flow]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_2
+
+    lea rdi, [kw_loops]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_3
+
+    lea rdi, [kw_memory]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_4
+
+    lea rdi, [kw_funcs]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_4
+
+    lea rdi, [kw_functions]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_4
+
+    lea rdi, [kw_func]
+    call basic_match_keyword
+    test rax, rax
+    jnz .page_4
+
+    lea rsi, [msg_basic_help_topics]
+    call fs_print_line
+    ret
+
+.page_1:
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .invalid
+    call basic_print_help_page_1
+    call basic_help_wait_done
+    ret
+
+.page_2:
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .invalid
+    call basic_print_help_page_2
+    call basic_help_wait_done
+    ret
+
+.page_3:
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .invalid
+    call basic_print_help_page_3
+    call basic_help_wait_done
+    ret
+
+.page_4:
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .invalid
+    call basic_print_help_page_4
+    call basic_help_wait_done
+    ret
+
+.invalid:
+    lea rsi, [msg_basic_help_topics]
+    call fs_print_line
+    ret
+
+basic_print_help_page_1:
+    call clear_screen
+    lea rsi, [msg_basic_help_page_1]
+    call fs_print_line
     lea rsi, [msg_basic_help_1]
+    call fs_print_line
+    lea rsi, [msg_basic_help_29]
     call fs_print_line
     lea rsi, [msg_basic_help_2]
     call fs_print_line
@@ -191,6 +299,12 @@ basic_print_help:
     lea rsi, [msg_basic_help_6]
     call fs_print_line
     lea rsi, [msg_basic_help_7]
+    call fs_print_line
+    ret
+
+basic_print_help_page_2:
+    call clear_screen
+    lea rsi, [msg_basic_help_page_2]
     call fs_print_line
     lea rsi, [msg_basic_help_8]
     call fs_print_line
@@ -208,6 +322,12 @@ basic_print_help:
     call fs_print_line
     lea rsi, [msg_basic_help_15]
     call fs_print_line
+    ret
+
+basic_print_help_page_3:
+    call clear_screen
+    lea rsi, [msg_basic_help_page_3]
+    call fs_print_line
     lea rsi, [msg_basic_help_16]
     call fs_print_line
     lea rsi, [msg_basic_help_17]
@@ -215,6 +335,16 @@ basic_print_help:
     lea rsi, [msg_basic_help_18]
     call fs_print_line
     lea rsi, [msg_basic_help_19]
+    call fs_print_line
+    lea rsi, [msg_basic_help_24]
+    call fs_print_line
+    lea rsi, [msg_basic_help_26]
+    call fs_print_line
+    ret
+
+basic_print_help_page_4:
+    call clear_screen
+    lea rsi, [msg_basic_help_page_4]
     call fs_print_line
     lea rsi, [msg_basic_help_20]
     call fs_print_line
@@ -224,10 +354,41 @@ basic_print_help:
     call fs_print_line
     lea rsi, [msg_basic_help_23]
     call fs_print_line
-    lea rsi, [msg_basic_help_24]
-    call fs_print_line
     lea rsi, [msg_basic_help_25]
     call fs_print_line
+    lea rsi, [msg_basic_help_27]
+    call fs_print_line
+    lea rsi, [msg_basic_help_28]
+    call fs_print_line
+    ret
+
+basic_help_wait_more:
+    lea rsi, [msg_basic_help_more]
+    call fs_print_line
+    call basic_help_read_key
+    cmp al, 1
+    je .exit
+    mov eax, 1
+    ret
+
+.exit:
+    xor eax, eax
+    ret
+
+basic_help_wait_done:
+    lea rsi, [msg_basic_help_done]
+    call fs_print_line
+    call basic_help_read_key
+    ret
+
+basic_help_read_key:
+.wait:
+    in al, 0x64
+    test al, 1
+    jz .wait
+    in al, 0x60
+    test al, 0x80
+    jnz .wait
     ret
 
 basic_read_line:
@@ -284,6 +445,26 @@ basic_read_line:
     pop rbx
     ret
 
+basic_poll_escape:
+    push rbx
+    push r12
+
+    in al, 0x64
+    test al, 1
+    jz .done
+    in al, 0x60
+    cmp al, 1
+    jne .done
+
+    mov byte [basic_run_stop], 1
+    lea rsi, [msg_basic_stopped]
+    call fs_print_line
+
+.done:
+    pop r12
+    pop rbx
+    ret
+
 basic_run_program:
     push rbx
     push r12
@@ -306,6 +487,11 @@ basic_run_program:
 .line_loop:
     cmp rbx, r12
     jae .done
+
+    ; Allow Esc to interrupt busy goto/if loops.
+    call basic_poll_escape
+    cmp byte [basic_run_stop], 1
+    je .stop
 
     mov ax, [rbx]
     mov [basic_current_line], ax
@@ -367,6 +553,11 @@ basic_exec_statement:
     test rax, rax
     jnz .call_stmt
 
+    lea rdi, [kw_intercept]
+    call basic_match_keyword
+    test rax, rax
+    jnz .intercept_stmt
+
     lea rdi, [kw_let]
     call basic_match_keyword
     test rax, rax
@@ -402,6 +593,10 @@ basic_exec_statement:
 
 .call_stmt:
     call basic_exec_call
+    ret
+
+.intercept_stmt:
+    call basic_exec_intercept
     ret
 
 .syntax:
@@ -444,6 +639,50 @@ basic_exec_call:
     ret
 
 .syntax:
+    call basic_runtime_syntax_error
+    ret
+
+basic_exec_intercept:
+    push rbx
+
+    call basic_parse_expr
+    test edx, edx
+    jz .syntax
+    test eax, eax
+    js .range
+    mov ebx, eax
+
+    call fs_skip_spaces
+    cmp byte [rsi], ','
+    jne .value
+    inc rsi
+
+.value:
+    call basic_parse_expr
+    test edx, edx
+    jz .syntax
+
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .syntax
+
+    cmp eax, 0
+    jl .range
+    cmp eax, 255
+    jg .range
+
+    mov [rbx], al
+    pop rbx
+    ret
+
+.range:
+    pop rbx
+    lea rsi, [msg_basic_intercept_range]
+    call basic_runtime_set_error
+    ret
+
+.syntax:
+    pop rbx
     call basic_runtime_syntax_error
     ret
 
@@ -1137,6 +1376,86 @@ basic_append_alk_extension:
     pop rsi
     ret
 
+basic_normalize_program_name:
+    push rbx
+    push r12
+    push r13
+    push r14
+
+    cmp ecx, 5
+    jb .fail
+
+    mov r12, rdi
+    mov r13d, ecx
+    xor r14d, r14d
+
+.copy_loop:
+    cmp r13d, 1
+    jbe .fail
+    mov al, [rsi]
+    mov [rdi], al
+    cmp al, '.'
+    jne .check_end
+    mov r14, rdi
+
+.check_end:
+    inc rsi
+    inc rdi
+    dec r13d
+    test al, al
+    jnz .copy_loop
+
+    lea rax, [rdi - 1]
+    sub rax, r12
+    test eax, eax
+    jz .fail
+    cmp eax, 4
+    jb .append
+
+    lea rbx, [rdi - 5]
+    cmp byte [rbx], '.'
+    jne .append
+    mov al, [rbx + 1]
+    call basic_char_to_lower
+    cmp al, 'a'
+    jne .replace
+    mov al, [rbx + 2]
+    call basic_char_to_lower
+    cmp al, 'l'
+    jne .replace
+    mov al, [rbx + 3]
+    call basic_char_to_lower
+    cmp al, 'k'
+    jne .replace
+
+    mov byte [rbx], '.'
+    mov byte [rbx + 1], 'a'
+    mov byte [rbx + 2], 'l'
+    mov byte [rbx + 3], 'k'
+    mov byte [rbx + 4], 0
+    mov eax, 1
+    jmp .done
+
+.replace:
+    test r14, r14
+    jz .append
+    mov byte [r14], 0
+
+.append:
+    mov rdi, r12
+    call basic_append_alk_extension
+    jmp .done
+
+.fail:
+    xor eax, eax
+
+.done:
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
 basic_parse_name_token:
     push rbx
     push rdx
@@ -1347,7 +1666,17 @@ basic_save_program:
     push r14
     push r15
 
-    mov r12, rsi
+    lea rdi, [basic_call_name_buffer]
+    mov ecx, BASIC_CALL_NAME_CAP
+    call basic_normalize_program_name
+    test eax, eax
+    jnz .name_ready
+    lea rsi, [msg_fs_invalid_name]
+    call fs_print_line
+    jmp .fail
+
+.name_ready:
+    lea r12, [basic_call_name_buffer]
     call fs_ensure_ready
     test rax, rax
     jz .fail
@@ -1439,7 +1768,18 @@ basic_load_program:
     push r13
     push r14
 
-    mov r12, rsi
+    mov r13, rsi
+    lea rdi, [basic_call_name_buffer]
+    mov ecx, BASIC_CALL_NAME_CAP
+    call basic_normalize_program_name
+    test eax, eax
+    jnz .name_ready
+    lea rsi, [msg_fs_invalid_name]
+    call fs_print_line
+    jmp .fail
+
+.name_ready:
+    lea r12, [basic_call_name_buffer]
     call fs_ensure_ready
     test rax, rax
     jz .fail
@@ -1447,7 +1787,20 @@ basic_load_program:
     mov rsi, r12
     call fs_find_entry
     test rax, rax
+    jnz .have_entry
+
+    mov rsi, r13
+    mov rdi, r12
+    call strcmp
+    test rax, rax
+    jnz .not_found
+
+    mov rsi, r13
+    call fs_find_entry
+    test rax, rax
     jz .not_found
+
+.have_entry:
 
     mov rdi, rax
     lea r9, [basic_file_buffer]
@@ -1934,6 +2287,12 @@ kw_new   db "new", 0
 kw_save  db "save", 0
 kw_load  db "load", 0
 kw_exit  db "exit", 0
+kw_editor db "editor", 0
+kw_flow  db "flow", 0
+kw_loops db "loops", 0
+kw_memory db "memory", 0
+kw_funcs db "funcs", 0
+kw_functions db "functions", 0
 kw_print db "print", 0
 kw_call  db "call", 0
 kw_goto  db "goto", 0
@@ -1941,6 +2300,7 @@ kw_if    db "if", 0
 kw_then  db "then", 0
 kw_end   db "end", 0
 kw_let   db "let", 0
+kw_intercept db "intercept", 0
 kw_func  db "func", 0
 kw_rem   db "rem", 0
 kw_not   db "not", 0
@@ -1971,7 +2331,17 @@ msg_basic_call_func     db "[alkan 1.0] function not found.", 0
 msg_basic_call_args     db "[alkan 1.0] function arg mismatch.", 0
 msg_basic_call_bad_func db "[alkan 1.0] invalid function definition.", 0
 msg_basic_invalid_module db "[alkan 1.0] invalid module name.", 0
-msg_basic_help_1        db "[alkan 1.0] quick guide", 0
+msg_basic_intercept_range db "[alkan 1.0] intercept needs address >= 0 and value 0..255.", 0
+msg_basic_stopped       db "[alkan 1.0] stopped.", 0
+msg_basic_help_page_1   db "[alkan 1.0] guide 1/4: editor", 0
+msg_basic_help_page_2   db "[alkan 1.0] guide 2/4: flow", 0
+msg_basic_help_page_3   db "[alkan 1.0] guide 3/4: loops", 0
+msg_basic_help_page_4   db "[alkan 1.0] guide 4/4: funcs and memory", 0
+msg_basic_help_more     db "next: any key   exit: ESC", 0
+msg_basic_help_done     db "press any key to return", 0
+msg_basic_help_topics   db "[alkan 1.0] topics: editor  flow  loops  funcs  memory", 0
+msg_basic_help_1        db "quick guide", 0
+msg_basic_help_29       db "jump to a page: help editor  help flow  help loops  help memory", 0
 msg_basic_help_2        db "editor commands: help  list  run  save <file>  load <file>  new  exit", 0
 msg_basic_help_3        db "shell run: alkan demo.alk", 0
 msg_basic_help_4        db "line format: <number> <code>", 0
@@ -1994,8 +2364,11 @@ msg_basic_help_20       db "function file calc.alk: 10 func plus(a b) = a + b", 
 msg_basic_help_21       db "use function: 10 x = call calc.plus(2 4)", 0
 msg_basic_help_22       db "direct call: 20 print call calc.plus(2 4)", 0
 msg_basic_help_23       db "call line: 30 call calc.plus(2 4)", 0
-msg_basic_help_24       db "save/load: save demo.alk  load demo.alk", 0
+msg_basic_help_24       db "save/load: save demo  load demo  (.alk auto)", 0
 msg_basic_help_25       db "shift keys work for +  _  :  ", 34, "  |  <  >  ?", 0
+msg_basic_help_26       db "run control: press ESC to stop a running loop", 0
+msg_basic_help_27       db "memory write: 80 intercept 753664, 65", 0
+msg_basic_help_28       db "screen RAM starts at 753664 and uses char/color bytes", 0
 
 basic_line_length dq 0
 basic_program_size dq 0
