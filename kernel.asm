@@ -146,6 +146,12 @@ tx_tail       dq 0            ; Current TX pointer
 my_mac        db 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 ; Default QEMU MAC
 my_ip         db 10, 0, 2, 15                       ; Default QEMU IP
 
+; --- STORAGE ---
+fs_ready         db 0
+fs_sector_buffer times 512 db 0
+fs_dir_buffer    times 8192 db 0
+fs_parse_buffer  times 256 db 0
+
 ; --- SYSTEM MESSAGES ---
 msg_welcome   db "KoelOS v1.2 [Automated Shell]", 0
 msg_prompt    db "root@koelos> ", 0

@@ -49,3 +49,36 @@ print_dec_byte:
     pop rbx
     pop rax
     ret
+
+; Input: EAX = 32-bit value to print in decimal
+print_dec_32:
+    push rax
+    push rbx
+    push rcx
+    push rdx
+
+    mov eax, eax
+    mov ebx, 10
+    xor ecx, ecx
+
+.div_loop_32:
+    xor edx, edx
+    div ebx
+    push rdx
+    inc ecx
+    test eax, eax
+    jnz .div_loop_32
+
+.print_loop_32:
+    pop rax
+    add al, '0'
+    push rcx
+    call print_char
+    pop rcx
+    loop .print_loop_32
+
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+    ret

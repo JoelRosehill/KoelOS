@@ -8,18 +8,20 @@ MAC_ADDRESS="525400123456"
 VM_BASE_DIR="$SCRIPT_DIR/.koelos-vm"
 
 find_vdi() {
-    local candidate
+    local dir entry name
 
-    for candidate in \
-        "$SCRIPT_DIR/KoelOS.vdi" \
-        "$SCRIPT_DIR/koelOS.vdi" \
-        "$SCRIPT_DIR/dist/vbox/KoelOS.vdi" \
-        "$SCRIPT_DIR/dist/vbox/koelOS.vdi"
-    do
-        if [ -f "$candidate" ]; then
-            printf '%s\n' "$candidate"
-            return 0
-        fi
+    for dir in "$SCRIPT_DIR" "$SCRIPT_DIR/dist/vbox"; do
+        for entry in "$dir"/*.vdi; do
+            [ -e "$entry" ] || continue
+
+            name="$(basename "$entry")"
+            case "$name" in
+                [Kk][Oo][Ee][Ll][Oo][Ss].[Vv][Dd][Ii])
+                    printf '%s\n' "$entry"
+                    return 0
+                    ;;
+            esac
+        done
     done
 
     return 1
@@ -70,16 +72,6 @@ if ! "$VBOXMANAGE" showvminfo "$VM_NAME" >/dev/null 2>&1; then
     "$VBOXMANAGE" storagectl "$VM_NAME" --name "$STORAGE_CTL" --add ide >/dev/null
 fi
 
-"$VBOXMANAGE" modifyvm "$VM_NAME" \
-    --memory 512 \
-    --vram 16 \
-    --boot1 disk \
-    --nic1 nat \
-    --nictype1 82540EM \
-    --nicpromisc1 allow-all \
-    --macaddress1 "$MAC_ADDRESS" \
-    --cableconnected1 on >/dev/null
-
 VM_STATE="$("$VBOXMANAGE" showvminfo "$VM_NAME" --machinereadable | sed -n 's/^VMState="\([^"]*\)"/\1/p')"
 if [ "$VM_STATE" = "running" ] || [ "$VM_STATE" = "starting" ] || [ "$VM_STATE" = "restoring" ] || [ "$VM_STATE" = "saving" ]; then
     echo "KoelOS is already running in VirtualBox as $VM_NAME"
@@ -91,7 +83,23 @@ if [ "$VM_STATE" = "paused" ]; then
     exit 0
 fi
 
+if [ "$VM_STATE" = "saved" ]; then
+    echo "Discarding saved VirtualBox state for $VM_NAME so the current disk image can boot..."
+    "$VBOXMANAGE" discardstate "$VM_NAME" >/dev/null
+fi
+
+"$VBOXMANAGE" modifyvm "$VM_NAME" \
+    --memory 512 \
+    --vram 16 \
+    --boot1 disk \
+    --nic1 nat \
+    --nictype1 82540EM \
+    --nicpromisc1 allow-all \
+    --macaddress1 "$MAC_ADDRESS" \
+    --cableconnected1 on >/dev/null
+
 "$VBOXMANAGE" storageattach "$VM_NAME" --storagectl "$STORAGE_CTL" --port 0 --device 0 --type hdd --medium none >/dev/null 2>&1 || true
+"$VBOXMANAGE" closemedium disk "$VDI_PATH" >/dev/null 2>&1 || true
 attach_vdi
 
 echo "Launching $VM_NAME"
