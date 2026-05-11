@@ -1,11 +1,11 @@
-cmd_basic db "basic", 0
+cmd_alkan db "alkan", 0
 
 %define BASIC_PROGRAM_CAP 4096
 %define BASIC_FILE_CAP    6144
 %define BASIC_LINE_CAP    256
 %define BASIC_VAR_BYTES   104
 
-do_basic:
+do_alkan:
     push rbx
 
     call basic_clear_program
@@ -1382,29 +1382,29 @@ kw_sub   db "sub", 0
 kw_eq    db "eq", 0
 kw_lt    db "lt", 0
 
-msg_basic_banner        db "[basic] line editor ready. type help.", 0
-msg_basic_prompt        db "basic> ", 0
-msg_basic_unknown       db "[basic] unknown command.", 0
-msg_basic_cleared       db "[basic] program cleared.", 0
-msg_basic_saved         db "[basic] program saved.", 0
-msg_basic_loaded        db "[basic] program loaded.", 0
-msg_basic_no_program    db "[basic] no program.", 0
-msg_basic_bad_line      db "[basic] line numbers are 1 to 65535.", 0
-msg_basic_save_usage    db "[basic] usage: save <name>", 0
-msg_basic_load_usage    db "[basic] usage: load <name>", 0
-msg_basic_too_large     db "[basic] program is too large.", 0
-msg_basic_file_too_large db "[basic] file is too large for basic.", 0
-msg_basic_text_only     db "[basic] basic only loads text files.", 0
-msg_basic_bad_file      db "[basic] invalid basic file.", 0
-msg_basic_syntax        db "[basic] syntax error on line ", 0
-msg_basic_missing_line  db "[basic] missing target line ", 0
+msg_basic_banner        db "[alkan 1.0] line editor ready. type help.", 0
+msg_basic_prompt        db "alkan> ", 0
+msg_basic_unknown       db "[alkan 1.0] unknown command.", 0
+msg_basic_cleared       db "[alkan 1.0] program cleared.", 0
+msg_basic_saved         db "[alkan 1.0] program saved.", 0
+msg_basic_loaded        db "[alkan 1.0] program loaded.", 0
+msg_basic_no_program    db "[alkan 1.0] no program.", 0
+msg_basic_bad_line      db "[alkan 1.0] line numbers are 1 to 65535.", 0
+msg_basic_save_usage    db "[alkan 1.0] usage: save <name>", 0
+msg_basic_load_usage    db "[alkan 1.0] usage: load <name>", 0
+msg_basic_too_large     db "[alkan 1.0] program is too large.", 0
+msg_basic_file_too_large db "[alkan 1.0] file is too large for alkan.", 0
+msg_basic_text_only     db "[alkan 1.0] alkan only loads text files.", 0
+msg_basic_bad_file      db "[alkan 1.0] invalid alkan file.", 0
+msg_basic_syntax        db "[alkan 1.0] syntax error on line ", 0
+msg_basic_missing_line  db "[alkan 1.0] missing target line ", 0
 msg_basic_help_1        db "line form: 10 a = 5", 0
 msg_basic_help_2        db "math: a = a add 1   or   a = a - 1", 0
 msg_basic_help_3        db "print: 20 print a", 0
 msg_basic_help_4        db "branch: 30 if a lt 10 then 20", 0
 msg_basic_help_5        db "equal: 40 if a = 10 then goto 60", 0
 msg_basic_help_6        db "editor: list  run  save demo  load demo  new  exit", 0
-msg_basic_help_7        db "shell run: basic demo", 0
+msg_basic_help_7        db "shell run: alkan demo", 0
 
 basic_line_length dq 0
 basic_program_size dq 0

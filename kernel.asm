@@ -153,7 +153,7 @@ fs_dir_buffer    times 8192 db 0
 fs_parse_buffer  times 256 db 0
 
 ; --- SYSTEM MESSAGES ---
-msg_welcome   db "KoelOS v1.2 [Automated Shell]", 0
+msg_welcome   db "KoelOS v1.3", 0
 msg_prompt    db "root@koelos> ", 0
 msg_unknown   db "Error: Unknown command.", 0
 
