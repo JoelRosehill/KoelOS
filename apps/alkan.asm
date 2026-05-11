@@ -196,6 +196,38 @@ basic_print_help:
     call fs_print_line
     lea rsi, [msg_basic_help_9]
     call fs_print_line
+    lea rsi, [msg_basic_help_10]
+    call fs_print_line
+    lea rsi, [msg_basic_help_11]
+    call fs_print_line
+    lea rsi, [msg_basic_help_12]
+    call fs_print_line
+    lea rsi, [msg_basic_help_13]
+    call fs_print_line
+    lea rsi, [msg_basic_help_14]
+    call fs_print_line
+    lea rsi, [msg_basic_help_15]
+    call fs_print_line
+    lea rsi, [msg_basic_help_16]
+    call fs_print_line
+    lea rsi, [msg_basic_help_17]
+    call fs_print_line
+    lea rsi, [msg_basic_help_18]
+    call fs_print_line
+    lea rsi, [msg_basic_help_19]
+    call fs_print_line
+    lea rsi, [msg_basic_help_20]
+    call fs_print_line
+    lea rsi, [msg_basic_help_21]
+    call fs_print_line
+    lea rsi, [msg_basic_help_22]
+    call fs_print_line
+    lea rsi, [msg_basic_help_23]
+    call fs_print_line
+    lea rsi, [msg_basic_help_24]
+    call fs_print_line
+    lea rsi, [msg_basic_help_25]
+    call fs_print_line
     ret
 
 basic_read_line:
@@ -1939,15 +1971,31 @@ msg_basic_call_func     db "[alkan 1.0] function not found.", 0
 msg_basic_call_args     db "[alkan 1.0] function arg mismatch.", 0
 msg_basic_call_bad_func db "[alkan 1.0] invalid function definition.", 0
 msg_basic_invalid_module db "[alkan 1.0] invalid module name.", 0
-msg_basic_help_1        db "line form: 10 a = 5", 0
-msg_basic_help_2        db "math: a = a + 1   or   a = a - 1", 0
-msg_basic_help_3        db "print: 20 print a", 0
-msg_basic_help_4        db "branch: 30 if a lt 10 then 20", 0
-msg_basic_help_5        db "call: 40 print call calc.plus(2 4)", 0
-msg_basic_help_6        db "func file: 10 plus(a b) = a + b", 0
-msg_basic_help_7        db "if eq: 50 if a = 10 then goto 70", 0
-msg_basic_help_8        db "editor: list  run  save demo.alk  load demo.alk  new  exit", 0
-msg_basic_help_9        db "shell run: alkan demo.alk", 0
+msg_basic_help_1        db "[alkan 1.0] quick guide", 0
+msg_basic_help_2        db "editor commands: help  list  run  save <file>  load <file>  new  exit", 0
+msg_basic_help_3        db "shell run: alkan demo.alk", 0
+msg_basic_help_4        db "line format: <number> <code>", 0
+msg_basic_help_5        db "set variable: 10 a = 5", 0
+msg_basic_help_6        db "delete line: 10", 0
+msg_basic_help_7        db "variables: single letters a to z", 0
+msg_basic_help_8        db "math: 20 a = a + 1", 0
+msg_basic_help_9        db "math: 30 a = a - 1", 0
+msg_basic_help_10       db "logic words also work: add  sub  eq  lt  not", 0
+msg_basic_help_11       db "print value: 40 print a", 0
+msg_basic_help_12       db "jump: 50 goto 20", 0
+msg_basic_help_13       db "if less: 60 if a lt 10 then 20", 0
+msg_basic_help_14       db "if equal: 70 if a = 10 then goto 90", 0
+msg_basic_help_15       db "stop: 90 end", 0
+msg_basic_help_16       db "example loop: 10 a = 1", 0
+msg_basic_help_17       db "example loop: 20 print a", 0
+msg_basic_help_18       db "example loop: 30 a = a + 1", 0
+msg_basic_help_19       db "example loop: 40 if a lt 6 then 20", 0
+msg_basic_help_20       db "function file calc.alk: 10 func plus(a b) = a + b", 0
+msg_basic_help_21       db "use function: 10 x = call calc.plus(2 4)", 0
+msg_basic_help_22       db "direct call: 20 print call calc.plus(2 4)", 0
+msg_basic_help_23       db "call line: 30 call calc.plus(2 4)", 0
+msg_basic_help_24       db "save/load: save demo.alk  load demo.alk", 0
+msg_basic_help_25       db "shift keys work for +  _  :  ", 34, "  |  <  >  ?", 0
 
 basic_line_length dq 0
 basic_program_size dq 0
