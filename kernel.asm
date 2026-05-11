@@ -16,8 +16,6 @@ keyboard_loop:
     jz keyboard_loop       
 
     in al, 0x60            
-    test al, 0x80          
-    jnz keyboard_loop      
 
     cmp al, 0x1C        ; ENTER
     je handle_enter
@@ -25,10 +23,7 @@ keyboard_loop:
     cmp al, 0x0E        ; BACKSPACE
     je .handle_backspace
 
-    xor rbx, rbx
-    mov bl, al             
-    lea rcx, [keymap]
-    mov al, [rcx + rbx] 
+    call kbd_translate_scancode
     test al, al            
     jz keyboard_loop       
 
@@ -130,6 +125,7 @@ input_buffer  times 256 db 0
 arg_buffer    times 256 db 0
 input_length  dq 0            
 current_color db 0x1F         
+shift_state   db 0
 
 ; --- MEMORY MANAGEMENT ---
 heap_current  dq 0x200000     ; Start allocating memory at the 2MB mark
@@ -162,6 +158,13 @@ keymap:
     db 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0, 0
     db 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', "'", '`', 0, '\'
     db 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0
+    times 128 db 0
+
+keymap_shift:
+    db 0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0
+    db 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0, 0
+    db 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|'
+    db 'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0
     times 128 db 0
 
 ; --- AUTO-GENERATED APP TABLE ---

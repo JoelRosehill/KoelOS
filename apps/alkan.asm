@@ -4,6 +4,10 @@ cmd_alkan db "alkan", 0
 %define BASIC_FILE_CAP    6144
 %define BASIC_LINE_CAP    256
 %define BASIC_VAR_BYTES   104
+%define BASIC_CALL_DEPTH  4
+%define BASIC_CALL_FILE_CAP 4096
+%define BASIC_CALL_MAX_ARGS 8
+%define BASIC_CALL_NAME_CAP 32
 
 do_alkan:
     push rbx
@@ -59,6 +63,7 @@ basic_handle_repl_line:
     mov rbx, rsi
     cmp byte [rbx], 0
     je .done
+    mov byte [basic_run_stop], 0
 
     call basic_parse_uint
     test edx, edx
@@ -187,6 +192,10 @@ basic_print_help:
     call fs_print_line
     lea rsi, [msg_basic_help_7]
     call fs_print_line
+    lea rsi, [msg_basic_help_8]
+    call fs_print_line
+    lea rsi, [msg_basic_help_9]
+    call fs_print_line
     ret
 
 basic_read_line:
@@ -203,18 +212,13 @@ basic_read_line:
     jz .wait_key
 
     in al, 0x60
-    test al, 0x80
-    jnz .wait_key
 
     cmp al, 0x1C
     je .enter
     cmp al, 0x0E
     je .backspace
 
-    xor rbx, rbx
-    mov bl, al
-    lea rcx, [keymap]
-    mov al, [rcx + rbx]
+    call kbd_translate_scancode
     test al, al
     jz .wait_key
 
@@ -326,6 +330,11 @@ basic_exec_statement:
     test rax, rax
     jnz .end_stmt
 
+    lea rdi, [kw_call]
+    call basic_match_keyword
+    test rax, rax
+    jnz .call_stmt
+
     lea rdi, [kw_let]
     call basic_match_keyword
     test rax, rax
@@ -359,6 +368,10 @@ basic_exec_statement:
     mov byte [basic_run_stop], 1
     ret
 
+.call_stmt:
+    call basic_exec_call
+    ret
+
 .syntax:
     call basic_runtime_syntax_error
 
@@ -380,6 +393,24 @@ basic_exec_print:
 
 .syntax_pop:
     pop rax
+.syntax:
+    call basic_runtime_syntax_error
+    ret
+
+basic_exec_call:
+    call basic_parse_call_expr
+    test edx, edx
+    jz .syntax
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    jne .syntax
+    cmp byte [basic_run_stop], 1
+    je .done
+    call basic_print_signed_32
+    call newline
+.done:
+    ret
+
 .syntax:
     call basic_runtime_syntax_error
     ret
@@ -460,11 +491,11 @@ basic_exec_assignment:
     push rbx
 
     call fs_skip_spaces
-    mov bl, [rsi]
-    cmp bl, 'a'
-    jb .syntax
-    cmp bl, 'z'
-    ja .syntax
+    mov al, [rsi]
+    call basic_var_char_to_index
+    test eax, eax
+    jz .syntax
+    mov bl, dl
     inc rsi
 
     call fs_skip_spaces
@@ -483,7 +514,6 @@ basic_exec_assignment:
 
     pop rbx
     movzx edx, bl
-    sub edx, 'a'
     lea rdi, [basic_vars + rdx * 4]
     mov [rdi], eax
     pop rbx
@@ -666,6 +696,11 @@ basic_parse_unary:
 basic_parse_primary:
     call fs_skip_spaces
 
+    lea rdi, [kw_call]
+    call basic_match_keyword
+    test rax, rax
+    jnz .call_expr
+
     mov al, [rsi]
     cmp al, '0'
     jb .check_var
@@ -673,17 +708,17 @@ basic_parse_primary:
     jbe .number
 
 .check_var:
-    cmp al, 'a'
-    jb .fail
-    cmp al, 'z'
-    ja .fail
-
-    movzx edx, al
-    sub edx, 'a'
+    call basic_var_char_to_index
+    test eax, eax
+    jz .fail
     lea rdi, [basic_vars + rdx * 4]
     mov eax, [rdi]
     inc rsi
     mov edx, 1
+    ret
+
+.call_expr:
+    call basic_parse_call_expr
     ret
 
 .number:
@@ -693,6 +728,484 @@ basic_parse_primary:
 .fail:
     xor eax, eax
     xor edx, edx
+    ret
+
+basic_parse_call_expr:
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+
+    call fs_skip_spaces
+    movzx r12d, byte [basic_call_depth]
+    cmp r12d, BASIC_CALL_DEPTH
+    jae .depth_error
+    inc byte [basic_call_depth]
+
+    lea rdi, [basic_call_name_buffer]
+    mov ecx, BASIC_CALL_NAME_CAP
+    call basic_parse_name_token
+    test eax, eax
+    jz .syntax_fail
+
+    cmp byte [rsi], '.'
+    jne .syntax_fail
+    inc rsi
+
+    lea rdi, [basic_call_func_buffer]
+    mov ecx, BASIC_CALL_NAME_CAP
+    call basic_parse_name_token
+    test eax, eax
+    jz .syntax_fail
+
+    call fs_skip_spaces
+    cmp byte [rsi], '('
+    jne .syntax_fail
+    inc rsi
+
+    mov eax, r12d
+    imul eax, BASIC_CALL_MAX_ARGS * 4
+    lea r13, [basic_call_arg_stack + rax]
+    xor r14d, r14d
+
+.arg_loop:
+    call fs_skip_spaces
+    cmp byte [rsi], ')'
+    je .args_done
+    cmp r14d, BASIC_CALL_MAX_ARGS
+    jae .arg_limit
+
+    call basic_parse_expr
+    test edx, edx
+    jz .syntax_fail
+    mov [r13 + r14 * 4], eax
+    inc r14d
+
+    call fs_skip_spaces
+    cmp byte [rsi], ','
+    jne .arg_loop
+    inc rsi
+    jmp .arg_loop
+
+.args_done:
+    inc rsi
+
+    lea rdi, [basic_call_name_buffer]
+    call basic_append_alk_extension
+    test eax, eax
+    jz .name_too_long
+
+    call fs_ensure_ready
+    test rax, rax
+    jz .reported_fail
+
+    lea rsi, [basic_call_name_buffer]
+    call fs_find_entry
+    test rax, rax
+    jz .file_missing
+
+    mov rbx, rax
+    mov eax, r12d
+    imul eax, BASIC_CALL_FILE_CAP
+    lea r9, [basic_call_file_stack + rax]
+    mov r10d, BASIC_CALL_FILE_CAP
+    mov rdi, rbx
+    call basic_read_file_into_buffer
+    test rax, rax
+    jz .reported_fail
+
+    mov ecx, r14d
+    lea rsi, [r9]
+    lea rdi, [basic_call_func_buffer]
+    call basic_find_external_function
+    cmp edx, 1
+    je .have_expr
+    cmp edx, 2
+    je .arg_mismatch
+    cmp edx, 3
+    je .bad_function
+    jmp .func_missing
+
+.have_expr:
+    mov rbx, rax
+    mov eax, r12d
+    imul eax, BASIC_VAR_BYTES
+    lea r15, [basic_call_saved_vars + rax]
+
+    mov rdi, r15
+    lea rsi, [basic_vars]
+    mov ecx, BASIC_VAR_BYTES
+    rep movsb
+
+    call basic_clear_vars
+    xor ecx, ecx
+
+.bind_loop:
+    cmp ecx, r14d
+    jae .eval
+    mov al, [basic_call_param_names + rcx]
+    call basic_var_char_to_index
+    mov eax, [r13 + rcx * 4]
+    mov [basic_vars + rdx * 4], eax
+    inc ecx
+    jmp .bind_loop
+
+.eval:
+    mov rsi, rbx
+    call basic_parse_expr
+    push rax
+    push rdx
+    call fs_skip_spaces
+    mov bl, [rsi]
+    pop rdx
+    pop rax
+    cmp bl, 0
+    je .restore_success
+    cmp bl, 13
+    je .restore_success
+    cmp bl, 10
+    je .restore_success
+    jmp .restore_syntax
+
+.restore_success:
+    push rax
+    push rdx
+    lea rdi, [basic_vars]
+    mov rsi, r15
+    mov ecx, BASIC_VAR_BYTES
+    rep movsb
+    pop rdx
+    pop rax
+    test edx, edx
+    jz .syntax_fail
+    jmp .success
+
+.restore_syntax:
+    lea rdi, [basic_vars]
+    mov rsi, r15
+    mov ecx, BASIC_VAR_BYTES
+    rep movsb
+    jmp .syntax_fail
+
+.depth_error:
+    lea rsi, [msg_basic_call_depth]
+    call basic_runtime_set_error
+    xor eax, eax
+    mov edx, 1
+    jmp .done
+
+.arg_limit:
+    lea rsi, [msg_basic_call_args]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.name_too_long:
+    lea rsi, [msg_basic_invalid_module]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.file_missing:
+    lea rsi, [msg_basic_call_file]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.func_missing:
+    lea rsi, [msg_basic_call_func]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.arg_mismatch:
+    lea rsi, [msg_basic_call_args]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.bad_function:
+    lea rsi, [msg_basic_call_bad_func]
+    call basic_runtime_set_error
+    jmp .reported_fail
+
+.reported_fail:
+    dec byte [basic_call_depth]
+    xor eax, eax
+    mov edx, 1
+    jmp .done
+
+.syntax_fail:
+    dec byte [basic_call_depth]
+    xor eax, eax
+    xor edx, edx
+    jmp .done
+
+.success:
+    dec byte [basic_call_depth]
+
+.done:
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+basic_runtime_set_error:
+    mov byte [basic_run_stop], 1
+    call fs_print_line
+    ret
+
+basic_find_external_function:
+    push rbx
+    push r12
+    push r13
+
+    mov r12d, ecx
+    mov r13, rdi
+
+.line_loop:
+    cmp byte [rsi], 0
+    je .not_found
+    cmp byte [rsi], 13
+    je .next_line
+    cmp byte [rsi], 10
+    je .next_line
+
+    call fs_skip_spaces
+    cmp byte [rsi], 0
+    je .not_found
+
+    call basic_parse_uint
+    test edx, edx
+    jz .after_line_no
+    call fs_skip_spaces
+
+.after_line_no:
+    lea rdi, [kw_func]
+    call basic_match_keyword
+    test rax, rax
+    jz .parse_name
+    call fs_skip_spaces
+
+.parse_name:
+    lea rdi, [basic_call_scan_name]
+    mov ecx, BASIC_CALL_NAME_CAP
+    call basic_parse_name_token
+    test eax, eax
+    jz .next_line
+
+    push rsi
+    lea rsi, [basic_call_scan_name]
+    mov rdi, r13
+    call strcmp
+    pop rsi
+    test rax, rax
+    jz .next_line
+
+    call fs_skip_spaces
+    cmp byte [rsi], '('
+    jne .invalid
+    inc rsi
+
+    call basic_parse_param_names
+    test eax, eax
+    jz .invalid
+    cmp ecx, r12d
+    jne .arg_mismatch_found
+
+    call fs_skip_spaces
+    cmp byte [rsi], '='
+    jne .invalid
+    inc rsi
+    call fs_skip_spaces
+    mov rax, rsi
+    mov edx, 1
+    jmp .done
+
+.next_line:
+    call basic_skip_to_next_line
+    jmp .line_loop
+
+.arg_mismatch_found:
+    xor eax, eax
+    mov edx, 2
+    jmp .done
+
+.invalid:
+    xor eax, eax
+    mov edx, 3
+    jmp .done
+
+.not_found:
+    xor eax, eax
+    xor edx, edx
+
+.done:
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+basic_parse_param_names:
+    push rbx
+
+    xor ecx, ecx
+
+.loop:
+    call fs_skip_spaces
+    cmp byte [rsi], ')'
+    je .done
+    cmp ecx, BASIC_CALL_MAX_ARGS
+    jae .fail
+
+    mov al, [rsi]
+    call basic_var_char_to_index
+    test eax, eax
+    jz .fail
+    mov al, [rsi]
+    call basic_char_to_lower
+    mov [basic_call_param_names + rcx], al
+    inc ecx
+    inc rsi
+
+    call fs_skip_spaces
+    cmp byte [rsi], ','
+    jne .loop
+    inc rsi
+    jmp .loop
+
+.done:
+    inc rsi
+    mov eax, 1
+    pop rbx
+    ret
+
+.fail:
+    xor eax, eax
+    pop rbx
+    ret
+
+basic_append_alk_extension:
+    push rsi
+
+    mov rsi, rdi
+    call fs_string_length
+    cmp eax, BASIC_CALL_NAME_CAP - 5
+    ja .fail
+    lea rdi, [rdi + rax]
+    mov byte [rdi], '.'
+    mov byte [rdi + 1], 'a'
+    mov byte [rdi + 2], 'l'
+    mov byte [rdi + 3], 'k'
+    mov byte [rdi + 4], 0
+    mov eax, 1
+    pop rsi
+    ret
+
+.fail:
+    xor eax, eax
+    pop rsi
+    ret
+
+basic_parse_name_token:
+    push rbx
+    push rdx
+
+    cmp ecx, 2
+    jb .fail
+    dec ecx
+    xor edx, edx
+
+.loop:
+    mov al, [rsi]
+    call basic_char_to_lower
+    cmp al, '_'
+    je .store
+    cmp al, 'a'
+    jb .digit_check
+    cmp al, 'z'
+    jbe .store
+
+.digit_check:
+    cmp edx, 0
+    je .end
+    cmp al, '0'
+    jb .end
+    cmp al, '9'
+    ja .end
+
+.store:
+    test ecx, ecx
+    jz .fail
+    mov [rdi], al
+    inc rdi
+    inc rsi
+    dec ecx
+    inc edx
+    jmp .loop
+
+.end:
+    test edx, edx
+    jz .fail
+    mov byte [rdi], 0
+    mov eax, 1
+    pop rdx
+    pop rbx
+    ret
+
+.fail:
+    xor eax, eax
+    pop rdx
+    pop rbx
+    ret
+
+basic_skip_to_next_line:
+.loop:
+    mov al, [rsi]
+    test al, al
+    jz .done
+    cmp al, 13
+    je .cr
+    cmp al, 10
+    je .lf
+    inc rsi
+    jmp .loop
+
+.cr:
+    inc rsi
+    cmp byte [rsi], 10
+    jne .done
+    inc rsi
+    ret
+
+.lf:
+    inc rsi
+
+.done:
+    ret
+
+basic_var_char_to_index:
+    call basic_char_to_lower
+    cmp al, 'a'
+    jb .fail
+    cmp al, 'z'
+    ja .fail
+    movzx edx, al
+    sub edx, 'a'
+    mov eax, 1
+    ret
+
+.fail:
+    xor eax, eax
+    xor edx, edx
+    ret
+
+basic_char_to_lower:
+    cmp al, 'A'
+    jb .done
+    cmp al, 'Z'
+    ja .done
+    add al, 32
+
+.done:
     ret
 
 basic_parse_uint:
@@ -905,6 +1418,8 @@ basic_load_program:
     jz .not_found
 
     mov rdi, rax
+    lea r9, [basic_file_buffer]
+    mov r10d, BASIC_FILE_CAP
     call basic_read_file_into_buffer
     test rax, rax
     jz .fail
@@ -1020,6 +1535,8 @@ basic_read_file_into_buffer:
     push rdx
     push r8
     push r9
+    push r10
+    push r11
 
     mov al, [rdi + FS_ENTRY_FLAGS_OFF]
     test al, FS_FLAG_BINARY
@@ -1030,11 +1547,13 @@ basic_read_file_into_buffer:
 
 .text_ok:
     mov edx, [rdi + FS_ENTRY_SIZE_OFF]
-    cmp edx, BASIC_FILE_CAP - 1
-    jae .too_large
+    mov ebx, r10d
+    dec ebx
+    cmp edx, ebx
+    ja .too_large
 
     mov r8d, [rdi + FS_ENTRY_START_OFF]
-    lea r9, [basic_file_buffer]
+    mov r11, r9
     test edx, edx
     jz .empty
 
@@ -1054,16 +1573,16 @@ basic_read_file_into_buffer:
 .copy_chunk:
     mov ebx, ecx
     lea rsi, [fs_sector_buffer]
-    mov rdi, r9
+    mov rdi, r11
     rep movsb
-    mov r9, rdi
+    mov r11, rdi
     sub edx, ebx
     inc r8d
     test edx, edx
     jnz .sector_loop
 
 .empty:
-    mov byte [r9], 0
+    mov byte [r11], 0
     mov eax, 1
     jmp .done
 
@@ -1080,6 +1599,8 @@ basic_read_file_into_buffer:
     xor eax, eax
 
 .done:
+    pop r11
+    pop r10
     pop r9
     pop r8
     pop rdx
@@ -1280,7 +1801,15 @@ basic_match_keyword:
     mov al, [rdi]
     test al, al
     jz .end_kw
-    cmp al, [rsi]
+    mov dl, [rsi]
+    cmp dl, 'A'
+    jb .cmp_ready
+    cmp dl, 'Z'
+    ja .cmp_ready
+    add dl, 32
+
+.cmp_ready:
+    cmp al, dl
     jne .fail
     inc rdi
     inc rsi
@@ -1291,6 +1820,10 @@ basic_match_keyword:
     test al, al
     jz .success
     cmp al, ' '
+    je .success
+    cmp al, 13
+    je .success
+    cmp al, 10
     je .success
     jmp .fail
 
@@ -1370,11 +1903,13 @@ kw_save  db "save", 0
 kw_load  db "load", 0
 kw_exit  db "exit", 0
 kw_print db "print", 0
+kw_call  db "call", 0
 kw_goto  db "goto", 0
 kw_if    db "if", 0
 kw_then  db "then", 0
 kw_end   db "end", 0
 kw_let   db "let", 0
+kw_func  db "func", 0
 kw_rem   db "rem", 0
 kw_not   db "not", 0
 kw_add   db "add", 0
@@ -1398,13 +1933,21 @@ msg_basic_text_only     db "[alkan 1.0] alkan only loads text files.", 0
 msg_basic_bad_file      db "[alkan 1.0] invalid alkan file.", 0
 msg_basic_syntax        db "[alkan 1.0] syntax error on line ", 0
 msg_basic_missing_line  db "[alkan 1.0] missing target line ", 0
+msg_basic_call_depth    db "[alkan 1.0] call stack too deep.", 0
+msg_basic_call_file     db "[alkan 1.0] call file not found.", 0
+msg_basic_call_func     db "[alkan 1.0] function not found.", 0
+msg_basic_call_args     db "[alkan 1.0] function arg mismatch.", 0
+msg_basic_call_bad_func db "[alkan 1.0] invalid function definition.", 0
+msg_basic_invalid_module db "[alkan 1.0] invalid module name.", 0
 msg_basic_help_1        db "line form: 10 a = 5", 0
-msg_basic_help_2        db "math: a = a add 1   or   a = a - 1", 0
+msg_basic_help_2        db "math: a = a + 1   or   a = a - 1", 0
 msg_basic_help_3        db "print: 20 print a", 0
 msg_basic_help_4        db "branch: 30 if a lt 10 then 20", 0
-msg_basic_help_5        db "equal: 40 if a = 10 then goto 60", 0
-msg_basic_help_6        db "editor: list  run  save demo  load demo  new  exit", 0
-msg_basic_help_7        db "shell run: alkan demo", 0
+msg_basic_help_5        db "call: 40 print call calc.plus(2 4)", 0
+msg_basic_help_6        db "func file: 10 plus(a b) = a + b", 0
+msg_basic_help_7        db "if eq: 50 if a = 10 then goto 70", 0
+msg_basic_help_8        db "editor: list  run  save demo.alk  load demo.alk  new  exit", 0
+msg_basic_help_9        db "shell run: alkan demo.alk", 0
 
 basic_line_length dq 0
 basic_program_size dq 0
@@ -1412,8 +1955,16 @@ basic_run_next dq 0
 basic_current_line dw 0
 basic_run_stop db 0
 basic_repl_exit db 0
+basic_call_depth db 0
 basic_num_buffer times 12 db 0
 basic_line_buffer times BASIC_LINE_CAP db 0
 basic_program_buffer times BASIC_PROGRAM_CAP db 0
 basic_file_buffer times BASIC_FILE_CAP db 0
 basic_vars times 26 dd 0
+basic_call_name_buffer times BASIC_CALL_NAME_CAP db 0
+basic_call_func_buffer times BASIC_CALL_NAME_CAP db 0
+basic_call_scan_name times BASIC_CALL_NAME_CAP db 0
+basic_call_param_names times BASIC_CALL_MAX_ARGS db 0
+basic_call_arg_stack times BASIC_CALL_DEPTH * BASIC_CALL_MAX_ARGS dd 0
+basic_call_saved_vars times BASIC_CALL_DEPTH * BASIC_VAR_BYTES db 0
+basic_call_file_stack times BASIC_CALL_DEPTH * BASIC_CALL_FILE_CAP db 0
