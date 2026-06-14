@@ -1,6 +1,6 @@
 # KoelOS
 
-> A hand-built 64-bit hobby OS written in NASM that boots straight into a shell, brings up networking, and ships with a text-only browser.
+> A hand-built 64-bit hobby OS written in NASM that boots straight into a shell, brings up networking, and ships with a text-only browser and a serial console.
 
 ![KoelOS browser demo](docs/media/browser-demo.gif)
 
@@ -32,22 +32,13 @@ KoelOS is a solo-built operating system project focused on direct control over t
 
 ## Commands
 
-Current shell commands:
+The authoritative list is whatever lives in `apps/*.asm`; `help` prints it with a
+short description for each command. Current set:
 
-- `announce`
-- `browser`
-- `colors`
-- `dhcp`
-- `diag`
-- `dns`
-- `fetch`
-- `help`
-- `ifconfig`
-- `ip`
-- `listen`
-- `netinit`
-- `ping`
-- `ver`
+- System: `help`, `ver`, `clear`, `echo`, `mem`, `date`, `uptime`, `reboot`, `shutdown`
+- Files: `ls`, `cat`, `hex`, `edit`, `mkfile`, `cp`, `mv`, `rm`, `binwrite`, `format`
+- Network: `netinit`, `ifconfig`, `ip`, `dhcp`, `dns`, `ping`, `listen`, `announce`, `diag`, `fetch`, `browser`
+- Language: `alkan` (REPL or run a program)
 
 Good demo commands:
 
@@ -79,7 +70,25 @@ ifconfig
 
 ## Quick Start
 
-Build the bare-metal image:
+### Run in QEMU (fastest dev loop)
+
+```bash
+bash run_qemu.sh
+```
+
+This builds the metal image and boots it in QEMU with the console mirrored to
+the serial line (`-serial stdio`). No VDI conversion, instant boot, and the same
+Intel 82540EM NIC as VirtualBox so the network stack still works. Useful flags:
+
+```bash
+bash run_qemu.sh --no-build     # reboot the current image
+bash run_qemu.sh --gdb          # pause at reset, then: gdb -ex 'target remote :1234'
+bash run_qemu.sh --headless     # no window, console only on serial
+```
+
+A headless boot smoke test (used by CI) lives at `scripts/smoke_test.sh`.
+
+### Build the bare-metal image
 
 ```bash
 bash build_metal.sh

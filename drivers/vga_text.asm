@@ -7,6 +7,7 @@ print_char:
     mov rdi, [cursor_pos]
     mov ah, [current_color]
     mov [rdi], ax
+    call serial_putc        ; mirror the glyph to COM1 (AL still = char)
     add qword [cursor_pos], 2
     call update_cursor
     pop rdi
@@ -42,6 +43,10 @@ newline:
     mov [cursor_pos], rax
     call check_scroll
     call update_cursor
+    mov al, 13              ; mirror the line break to COM1 as CRLF
+    call serial_putc
+    mov al, 10
+    call serial_putc
     pop rdx
     pop rcx
     pop rax

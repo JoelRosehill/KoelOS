@@ -3,6 +3,8 @@
 default rel             ; Use RIP-relative addressing for stability
 
 _start:
+    call serial_init       ; bring up COM1 so console output is mirrored
+    call rtc_capture_boot  ; snapshot boot time for `uptime`
     call clear_screen
     lea rsi, [msg_welcome] ; Use LEA for rip-relative addressing
     call print_string
@@ -15,7 +17,12 @@ keyboard_loop:
     and al, 1
     jz keyboard_loop       
 
-    in al, 0x60            
+    in al, 0x60
+
+    cmp al, 0xE0        ; EXTENDED-KEY PREFIX (arrows, etc.)
+    je .set_extended
+    cmp byte [kbd_extended], 0
+    jne .handle_extended
 
     cmp al, 0x1C        ; ENTER
     je handle_enter
@@ -40,14 +47,34 @@ keyboard_loop:
 
 .handle_backspace:
     cmp qword [input_length], 0
-    je keyboard_loop       
-    
+    je keyboard_loop
+
     dec qword [input_length]
     mov rbx, [input_length]
     lea rdi, [input_buffer]
-    mov byte [rdi + rbx], 0 
-    
-    call do_backspace      
+    mov byte [rdi + rbx], 0
+
+    call do_backspace
+    jmp keyboard_loop
+
+.set_extended:
+    mov byte [kbd_extended], 1
+    jmp keyboard_loop
+
+.handle_extended:
+    mov byte [kbd_extended], 0
+    cmp al, 0x48           ; UP ARROW -> previous history entry
+    je .history_up
+    cmp al, 0x50           ; DOWN ARROW -> next history entry
+    je .history_down
+    jmp keyboard_loop
+
+.history_up:
+    call history_prev
+    jmp keyboard_loop
+
+.history_down:
+    call history_next
     jmp keyboard_loop
 
 ; --- COMMAND PARSER ---
@@ -59,6 +86,8 @@ handle_enter:
 
     cmp qword [input_length], 0
     je command_done
+
+    call history_add        ; remember the raw command before it is split
 
     ; --- ARGUMENT SPLITTER ---
     lea rsi, [input_buffer]
@@ -115,6 +144,136 @@ command_done:
     call print_prompt
     jmp keyboard_loop
 
+; --- COMMAND HISTORY ---
+; Ring buffer of recent command lines, browsed with the up/down arrows.
+; The backing store lives in free RAM (HISTORY_BASE) to keep kernel.bin small.
+%define HISTORY_SIZE  8                 ; entries (must stay a power of two)
+%define HISTORY_STRIDE 256             ; bytes per entry
+%define HISTORY_BASE  0x300000         ; identity-mapped scratch RAM
+
+; Copy the current input line into the ring and reset the browse cursor.
+history_add:
+    push rax
+    push rcx
+    push rsi
+    push rdi
+
+    mov rax, [history_write]
+    shl rax, 8                  ; * HISTORY_STRIDE
+    mov rdi, HISTORY_BASE
+    add rdi, rax
+    lea rsi, [input_buffer]
+.copy:
+    mov al, [rsi]
+    mov [rdi], al
+    test al, al
+    jz .copied
+    inc rsi
+    inc rdi
+    jmp .copy
+.copied:
+    mov rax, [history_write]
+    inc rax
+    and rax, HISTORY_SIZE - 1
+    mov [history_write], rax
+
+    mov rax, [history_count]
+    cmp rax, HISTORY_SIZE
+    jae .pos
+    inc rax
+    mov [history_count], rax
+.pos:
+    mov rax, [history_count]    ; park cursor past the newest entry
+    mov [history_pos], rax
+
+    pop rdi
+    pop rsi
+    pop rcx
+    pop rax
+    ret
+
+; Erase the visible input line and clear the input buffer state.
+history_clear_line:
+    push rax
+.loop:
+    cmp qword [input_length], 0
+    je .done
+    call do_backspace
+    dec qword [input_length]
+    jmp .loop
+.done:
+    mov byte [input_buffer], 0
+    pop rax
+    ret
+
+; Load the entry at the logical [history_pos] into the input line and echo it.
+history_load:
+    push rax
+    push rcx
+    push rsi
+    push rdi
+
+    call history_clear_line
+
+    mov rax, [history_write]    ; slot = (write - count + pos) mod SIZE
+    sub rax, [history_count]
+    add rax, [history_pos]
+    add rax, HISTORY_SIZE * 2   ; bias positive before masking
+    and rax, HISTORY_SIZE - 1
+    shl rax, 8                  ; * HISTORY_STRIDE
+    mov rsi, HISTORY_BASE
+    add rsi, rax
+
+    lea rdi, [input_buffer]
+    xor rcx, rcx
+.copy:
+    mov al, [rsi + rcx]
+    test al, al
+    jz .copied
+    mov [rdi + rcx], al
+    inc rcx
+    cmp rcx, 255
+    jb .copy
+.copied:
+    mov byte [rdi + rcx], 0
+    mov [input_length], rcx
+
+    mov rsi, rdi
+    call print_string
+
+    pop rdi
+    pop rsi
+    pop rcx
+    pop rax
+    ret
+
+; Up arrow: step back toward older commands.
+history_prev:
+    cmp qword [history_count], 0
+    je .done
+    cmp qword [history_pos], 0
+    je .done
+    dec qword [history_pos]
+    call history_load
+.done:
+    ret
+
+; Down arrow: step toward newer commands, ending on a blank line.
+history_next:
+    mov rax, [history_pos]
+    cmp rax, [history_count]
+    jae .done
+    inc rax
+    mov [history_pos], rax
+    cmp rax, [history_count]
+    je .blank
+    call history_load
+    ret
+.blank:
+    call history_clear_line
+.done:
+    ret
+
 ; --- EXTERNAL FILES ---
 %include "helpers.asm"
 
@@ -123,9 +282,15 @@ command_done:
 cursor_pos    dq 0xb8000
 input_buffer  times 256 db 0  
 arg_buffer    times 256 db 0
-input_length  dq 0            
-current_color db 0x1F         
+input_length  dq 0
+current_color db 0x1F
 shift_state   db 0
+kbd_extended  db 0            ; set after an 0xE0 scancode prefix
+
+; --- COMMAND HISTORY STATE (ring metadata; data lives at HISTORY_BASE) ---
+history_count dq 0            ; number of stored entries (caps at HISTORY_SIZE)
+history_write dq 0            ; next ring slot to write
+history_pos   dq 0            ; browse cursor (== history_count means blank line)
 
 ; --- MEMORY MANAGEMENT ---
 heap_current  dq 0x200000     ; Start allocating memory at the 2MB mark
@@ -145,11 +310,11 @@ my_ip         db 10, 0, 2, 15                       ; Default QEMU IP
 ; --- STORAGE ---
 fs_ready         db 0
 fs_sector_buffer times 512 db 0
-fs_dir_buffer    times 8192 db 0
+fs_dir_buffer    equ 0x301000   ; 8KB directory cache in scratch RAM (kept out of kernel.bin)
 fs_parse_buffer  times 256 db 0
 
 ; --- SYSTEM MESSAGES ---
-msg_welcome   db "KoelOS v1.3", 0
+msg_welcome   db "KoelOS v1.5", 0
 msg_prompt    db "root@koelos> ", 0
 msg_unknown   db "Error: Unknown command.", 0
 
