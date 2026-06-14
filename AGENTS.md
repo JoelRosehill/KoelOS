@@ -7,14 +7,18 @@
 ## Build And Verify
 - `bash build_metal.sh` is the fastest full compile check. It regenerates `build/generated_apps.asm`, writes NASM errors to `build/build.log`, and produces `dist/metal/boot.bin`, `dist/metal/kernel.bin`, and `dist/metal/koelOS-metal.img`.
 - `bash build_vbox.sh` is the end-to-end verification path. It rebuilds the metal image, converts it to `dist/vbox/KoelOS.vdi`, then launches through `launch_koelos_vdi.sh`.
+- `bash run_qemu.sh` is the fastest end-to-end check: it rebuilds the metal image and boots it in QEMU with the console mirrored to `-serial stdio`. Flags: `--no-build`, `--gdb` (gdb stub on :1234), `--headless`, `--debug-exit`.
+- `bash scripts/smoke_test.sh` boots the image headless in QEMU and asserts the serial log reaches the `root@koelos>` shell prompt. This is what `.github/workflows/ci.yml` runs after `build_metal.sh` on every push/PR.
 - `bash launch_koelos_vdi.sh` relaunches an existing VDI without rebuilding. Use it when debugging VirtualBox behavior rather than the OS build itself.
-- There is no repo-local test, lint, typecheck, package-manager, or CI config. Verification here is build success plus manual boot.
+- Verification here is build success plus a boot check (the QEMU smoke test, or a manual boot). There is no lint/typecheck/package-manager step.
+- The console is mirrored to COM1 by `drivers/serial.asm` (via `print_char`/`newline`), so serial logs reflect on-screen output. KoelOS does not read input from serial; drive the shell via the keyboard (or QEMU monitor `sendkey`).
 - All produced images are BIOS-only. There is no UEFI build flow in this repo.
 
 ## Assembly Wiring
 - `boot.asm` is a 16-bit BIOS boot sector. `build_metal.sh` compiles it with `-d KERNEL_SECTORS=...` based on the current `kernel.bin` size; do not compile `boot.asm` separately with a guessed sector count.
 - `boot.bin` must stay exactly 512 bytes.
 - `build_metal.sh` hard-fails once `kernel.bin` exceeds `MAX_KERNEL_SECTORS=127`; increasing kernel size past that requires expanding the bootloader load window, not just retrying the build.
+- This is a flat `-f bin` image, so every `times N db 0` buffer is written into `kernel.bin` and costs sectors. Large scratch buffers therefore live in identity-mapped RAM instead of the binary: `fs_dir_buffer` (`equ 0x301000`), command history (`HISTORY_BASE 0x300000`), and the editor text (`EDIT_TEXT 0x308000`). Boot paging maps the low 4GB, and the bump heap only reaches ~`0x210000`, so `0x300000+` is free. Add new big buffers the same way rather than reserving them in-image.
 - `kernel.asm` is the 64-bit entrypoint at `0x10000`. It includes `helpers.asm` plus the generated `build/generated_apps.asm`.
 
 ## Adding Commands Or Drivers

@@ -1121,6 +1121,177 @@ fs_parse_hex_input:
     pop rbx
     ret
 
+; Input: RSI = entry ptr, RDI = destination buffer
+; Output: RAX = bytes read on success, 0 on failure
+fs_read_entry:
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push r8
+    push r9
+    push r10
+
+    mov edx, [rsi + FS_ENTRY_SIZE_OFF]   ; bytes remaining
+    mov r8d, [rsi + FS_ENTRY_START_OFF]   ; current source LBA
+    mov r9d, edx                          ; remember total length
+    mov r10, rdi                          ; current destination
+    test edx, edx
+    jz .done
+
+.sector_loop:
+    mov eax, r8d
+    mov ecx, 1
+    lea rdi, [fs_sector_buffer]
+    call ata_read_sectors
+    test rax, rax
+    jz .fail
+
+    mov ecx, edx
+    cmp ecx, 512
+    jbe .chunk_ready
+    mov ecx, 512
+.chunk_ready:
+    lea rsi, [fs_sector_buffer]
+    mov rdi, r10
+    push rcx
+    rep movsb
+    pop rcx
+    add r10, rcx
+
+    inc r8d
+    sub edx, 512
+    jg .sector_loop
+
+.done:
+    mov eax, r9d
+    jmp .exit
+.fail:
+    xor eax, eax
+.exit:
+    pop r10
+    pop r9
+    pop r8
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    ret
+
+; Copy a file's data + binary flag to a new name (streamed via the sector
+; buffer, so it needs no large scratch region).
+; Input: RSI = source entry ptr, RDI = destination name ptr
+; Output: RAX = 1 on success, 0 on failure (prints the reason)
+fs_copy_entry:
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+
+    mov r12, rsi               ; source entry
+    mov r13, rdi               ; destination name
+
+    mov rsi, r13
+    call fs_string_length
+    test eax, eax
+    jz .invalid
+    cmp eax, FS_NAME_LEN
+    jae .invalid
+
+    mov rsi, r13               ; reuse a matching name (overwrite) if present
+    call fs_find_entry
+    mov rbx, rax
+    test rbx, rbx
+    jnz .have_dest
+    call fs_find_free_entry
+    mov rbx, rax
+    test rbx, rbx
+    jz .no_space
+
+.have_dest:
+    mov r14d, [r12 + FS_ENTRY_SIZE_OFF]   ; source size in bytes
+    mov eax, r14d
+    add eax, 511
+    shr eax, 9
+    mov r15d, eax                          ; sectors needed
+
+    xor r10d, r10d                         ; destination start LBA
+    test r15d, r15d
+    jz .meta
+
+    mov ecx, r15d
+    mov rdx, rbx                           ; ignore dest's old region when placing
+    call fs_find_free_region
+    test eax, eax
+    jz .no_space
+    mov r10d, eax
+
+    mov r8d, [r12 + FS_ENTRY_START_OFF]    ; source start LBA
+    xor r9d, r9d                           ; sector index
+.copy_loop:
+    mov eax, r8d
+    add eax, r9d
+    mov ecx, 1
+    lea rdi, [fs_sector_buffer]
+    call ata_read_sectors
+    test rax, rax
+    jz .disk
+    mov eax, r10d
+    add eax, r9d
+    mov ecx, 1
+    lea rdi, [fs_sector_buffer]
+    call ata_write_sectors
+    test rax, rax
+    jz .disk
+    inc r9d
+    cmp r9d, r15d
+    jl .copy_loop
+
+.meta:
+    mov rdi, rbx
+    mov ecx, FS_ENTRY_SIZE
+    call fs_memzero
+    mov rdi, rbx
+    mov rsi, r13
+    call fs_copy_name_to_entry
+    mov dword [rbx + FS_ENTRY_SIZE_OFF], r14d
+    mov dword [rbx + FS_ENTRY_START_OFF], r10d
+    mov dword [rbx + FS_ENTRY_SECT_OFF], r15d
+    mov al, [r12 + FS_ENTRY_FLAGS_OFF]
+    and al, FS_FLAG_BINARY
+    or al, FS_FLAG_USED
+    mov [rbx + FS_ENTRY_FLAGS_OFF], al
+
+    call fs_sync_directory
+    test rax, rax
+    jz .disk
+
+    mov eax, 1
+    jmp .done
+
+.invalid:
+    lea rsi, [msg_fs_invalid_name]
+    call fs_print_line
+    xor eax, eax
+    jmp .done
+.no_space:
+    lea rsi, [msg_fs_no_space]
+    call fs_print_line
+    xor eax, eax
+    jmp .done
+.disk:
+    lea rsi, [msg_fs_disk_error]
+    call fs_print_line
+    xor eax, eax
+.done:
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
 msg_fs_format       db "[FS] Formatting storage...", 0
 msg_fs_disk_error   db "[FS] Storage I/O error.", 0
 msg_fs_invalid_name db "[FS] Invalid file name.", 0
