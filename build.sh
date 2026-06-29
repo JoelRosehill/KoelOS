@@ -2,6 +2,7 @@
 # build.sh — the one KoelOS build tool.
 # Builds a disk image and can write it straight to a floppy.
 #
+#   ./build.sh                       # no args -> interactive menu (GUI on macOS)
 #   ./build.sh [--arch 32|64] [--target floppy|metal]
 #              [--write [DEVICE]] [--run] [--test] [--vdi] [--cpu MODEL]
 #
@@ -27,7 +28,72 @@ ok()   { printf "${GREEN}[ok]${NC} %s\n" "$1"; }
 warn() { printf "${YELLOW}[warn]${NC} %s\n" "$1"; }
 die()  { printf "${RED}[error]${NC} %s\n" "$1" >&2; exit 1; }
 
+# --- interactive menu (used when build.sh is run with no arguments) ----------
+# Native dialog GUI on macOS; plain-text menu everywhere else. Set BUILD_NOGUI=1
+# to force the text menu.
+osa_pick() {   # prompt opt...  -> echoes the chosen option ("" if cancelled)
+    local prompt="$1"; shift
+    local items="" o
+    for o in "$@"; do items="$items, \"$o\""; done
+    items="${items#, }"
+    osascript \
+        -e "set r to choose from list {$items} with prompt \"$prompt\" with title \"KoelOS build.sh\" without empty selection allowed" \
+        -e 'if r is false then return ""' \
+        -e 'return item 1 of r' 2>/dev/null
+}
+
+gui_menu() {
+    local a t act
+    a="$(osa_pick "CPU width" "64-bit  (full OS, needs a 64-bit CPU)" "32-bit  (lite shell, any 386+)")"
+    [ -z "$a" ] && { info "cancelled"; exit 0; }
+    case "$a" in 32*) ARCH=32 ;; *) ARCH=64 ;; esac
+    t="$(osa_pick "Disk image" "floppy  (1.44 MB)" "metal  (hard disk)")"
+    [ -z "$t" ] && { info "cancelled"; exit 0; }
+    case "$t" in metal*) TARGET=metal ;; *) TARGET=floppy ;; esac
+    act="$(osa_pick "Action" "Build only" "Build + run in QEMU" "Build + smoke test" "Build + write to floppy" "Build + VirtualBox .vdi")"
+    [ -z "$act" ] && { info "cancelled"; exit 0; }
+    case "$act" in
+        *"run in QEMU"*) RUN=1 ;;
+        *"smoke test"*)  TEST=1 ;;
+        *"write to"*)    WRITE=1; TARGET=floppy ;;
+        *"VirtualBox"*)  VDI=1; TARGET=metal ;;
+    esac
+}
+
+text_menu() {
+    local c
+    printf "\n${BOLD}KoelOS build${NC}  (run with flags to skip this menu — see --help)\n"
+    printf "\nCPU width:\n  1) 64-bit  (full OS, needs a 64-bit CPU)\n  2) 32-bit  (lite shell, any 386+)\n> "
+    read -r c || exit 0; case "$c" in 2) ARCH=32 ;; *) ARCH=64 ;; esac
+    printf "\nDisk image:\n  1) floppy  (1.44 MB)\n  2) metal   (hard disk)\n> "
+    read -r c || exit 0; case "$c" in 2) TARGET=metal ;; *) TARGET=floppy ;; esac
+    printf "\nAction:\n  1) Build only\n  2) Build + run in QEMU\n  3) Build + smoke test\n  4) Build + write to floppy\n  5) Build + VirtualBox .vdi\n> "
+    read -r c || exit 0
+    case "$c" in
+        2) RUN=1 ;;
+        3) TEST=1 ;;
+        4) WRITE=1; TARGET=floppy ;;
+        5) VDI=1; TARGET=metal ;;
+    esac
+    printf "\n"
+}
+
+run_menu() {
+    if [ "$(uname)" = Darwin ] && command -v osascript >/dev/null 2>&1 && [ -z "${BUILD_NOGUI:-}" ]; then
+        gui_menu
+    else
+        text_menu
+    fi
+    local extra=""
+    [ "$RUN"   = 1 ] && extra="$extra + run"
+    [ "$TEST"  = 1 ] && extra="$extra + test"
+    [ "$WRITE" = 1 ] && extra="$extra + write"
+    [ "$VDI"   = 1 ] && extra="$extra + vdi"
+    info "building ${ARCH}-bit ${TARGET}${extra}"
+}
+
 ARCH=64; TARGET=floppy; WRITE=0; DEV=""; RUN=0; TEST=0; VDI=0; CPU=""
+if [ $# -eq 0 ]; then run_menu; fi
 while [ $# -gt 0 ]; do
     case "$1" in
         --arch)   ARCH="$2"; shift ;;
