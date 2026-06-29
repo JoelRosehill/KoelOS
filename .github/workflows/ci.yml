@@ -15,17 +15,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y nasm qemu-system-x86
 
-      - name: Build metal image
-        run: bash build_metal.sh
+      - name: 64-bit metal — build + boot smoke test
+        run: ./build.sh --arch 64 --target metal --test
 
-      - name: Boot smoke test (HDD)
-        run: bash scripts/smoke_test.sh
+      - name: 64-bit floppy — build + boot smoke test
+        run: ./build.sh --arch 64 --target floppy --test
 
-      - name: Build floppy image
-        run: bash build_floppy.sh
+      - name: 32-bit metal — build + boot smoke test
+        run: ./build.sh --arch 32 --target metal --test
 
-      - name: Boot smoke test (floppy)
-        run: bash scripts/smoke_test.sh floppy
-
-      - name: Build + smoke test 32-bit lite (floppy + metal)
-        run: ./koel test --arch 32 --target all
+      - name: 32-bit floppy — build + boot smoke test
+        run: ./build.sh --arch 32 --target floppy --test
