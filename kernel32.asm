@@ -132,7 +132,7 @@ do_ver:
     call print_string
     call newline
     jmp command_done
-.msg db "KoelOS v1.6.0 (32-bit lite)", 0
+.msg db "KoelOS v1.6.0 (32-bit)", 0
 
 do_clear:
     call clear_screen
@@ -216,6 +216,65 @@ do_reboot:
     hlt
     jmp .hang
 .msg db "Rebooting...", 0
+
+do_shutdown:
+    mov esi, .msg
+    call print_string
+    call newline
+    mov dx, 0x604                  ; ACPI poweroff (QEMU)
+    mov ax, 0x2000
+    out dx, ax
+    mov dx, 0xB004                 ; Bochs / older QEMU
+    mov ax, 0x2000
+    out dx, ax
+    mov dx, 0x4004                 ; VirtualBox
+    mov ax, 0x3400
+    out dx, ax
+    cli
+.hang:
+    hlt
+    jmp .hang
+.msg db "Shutting down...", 0
+
+do_colors:
+    mov esi, [arg_ptr]
+    mov al, [esi]
+    cmp al, '1'
+    je .t1
+    cmp al, '2'
+    je .t2
+    cmp al, '3'
+    je .t3
+    cmp al, '4'
+    je .t4
+    cmp al, '5'
+    je .t5
+    mov esi, .usage
+    call print_string
+    call newline
+    jmp command_done
+.t1:
+    mov byte [current_color], 0x1F  ; blue / white (default)
+    jmp .apply
+.t2:
+    mov byte [current_color], 0x02  ; matrix green
+    jmp .apply
+.t3:
+    mov byte [current_color], 0x70  ; classic white / black
+    jmp .apply
+.t4:
+    mov byte [current_color], 0x0B  ; cyan
+    jmp .apply
+.t5:
+    mov byte [current_color], 0x4F  ; alert red / white
+.apply:
+    call clear_screen
+    mov esi, .ok
+    call print_string
+    call newline
+    jmp command_done
+.usage db "Usage: colors [1-5]", 0
+.ok    db "Theme updated!", 0
 
 ; ============================================================================
 ; VGA text console (writes to 0xB8000)
@@ -592,6 +651,8 @@ command_table:
     dd cmd_date,     do_date
     dd cmd_uptime,   do_uptime
     dd cmd_reboot,   do_reboot
+    dd cmd_shutdown, do_shutdown
+    dd cmd_colors,   do_colors
     dd cmd_ls,       do_ls
     dd cmd_cat,      do_cat
     dd cmd_mkfile,   do_mkfile
@@ -612,6 +673,8 @@ cmd_echo     db "echo", 0
 cmd_date     db "date", 0
 cmd_uptime   db "uptime", 0
 cmd_reboot   db "reboot", 0
+cmd_shutdown db "shutdown", 0
+cmd_colors   db "colors", 0
 cmd_ls       db "ls", 0
 cmd_cat      db "cat", 0
 cmd_mkfile   db "mkfile", 0
