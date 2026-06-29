@@ -5,23 +5,29 @@
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-IMG="$ROOT_DIR/dist/metal/koelOS-metal.img"
 QEMU="qemu-system-x86_64"
 TIMEOUT_TICKS=40        # 40 * 0.5s = 20s budget to reach the prompt
+MODE="${1:-metal}"      # "metal" (IDE disk) or "floppy" (1.44 MB CHS boot)
 
 command -v "$QEMU" >/dev/null 2>&1 || { echo "ERROR: $QEMU not found" >&2; exit 1; }
 
-if [ ! -f "$IMG" ]; then
-    echo "Image missing; building..."
-    bash "$ROOT_DIR/build_metal.sh"
+if [ "$MODE" = "floppy" ]; then
+    IMG="$ROOT_DIR/dist/floppy/koelOS-floppy.img"
+    [ -f "$IMG" ] || { echo "Image missing; building..."; bash "$ROOT_DIR/build_floppy.sh"; }
+    set -- -drive file="$IMG",if=floppy,format=raw -boot a
+else
+    IMG="$ROOT_DIR/dist/metal/koelOS-metal.img"
+    [ -f "$IMG" ] || { echo "Image missing; building..."; bash "$ROOT_DIR/build_metal.sh"; }
+    set -- -drive format=raw,file="$IMG",if=ide
 fi
+echo "Smoke testing $MODE image: $IMG"
 
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
 "$QEMU" \
     -m 256M \
-    -drive format=raw,file="$IMG",if=ide \
+    "$@" \
     -netdev user,id=net0 \
     -device e1000,netdev=net0,mac=52:54:00:12:34:56 \
     -display none -monitor none \

@@ -100,6 +100,29 @@ Output:
 dist/metal/koelOS-metal.img
 ```
 
+### Boot from a floppy
+
+KoelOS can boot off a real 1.44 MB floppy (or USB-FDD). The floppy bootloader
+([boot_floppy.asm](boot_floppy.asm)) loads the kernel with classic **CHS reads**
+(INT 13h AH=02h) instead of the LBA/EDD read used by the hard-disk boot, and
+carries a FAT-style BPB header for BIOS compatibility.
+
+```bash
+bash build_floppy.sh            # -> dist/floppy/koelOS-floppy.img (1,474,560 bytes)
+bash run_qemu.sh --floppy       # build + boot the floppy in QEMU
+```
+
+Flash it to a physical floppy / USB-FDD:
+
+```bash
+sudo dd if=dist/floppy/koelOS-floppy.img of=/dev/diskN bs=512
+```
+
+Note: a floppy-only machine has no IDE/ATA disk, so the storage commands
+(`ls`, `cat`, `cp`, `mv`, saving in `edit`, …) report `[FS] Storage I/O error`.
+Everything else — shell, history, in-RAM `edit`, networking, `alkan`,
+`date`/`uptime`, `clear`/`echo`/`mem`, `reboot`/`shutdown` — works.
+
 Build and launch the VirtualBox target:
 
 ```bash

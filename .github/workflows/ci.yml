@@ -18,5 +18,11 @@ jobs:
       - name: Build metal image
         run: bash build_metal.sh
 
-      - name: Boot smoke test
+      - name: Boot smoke test (HDD)
         run: bash scripts/smoke_test.sh
+
+      - name: Build floppy image
+        run: bash build_floppy.sh
+
+      - name: Boot smoke test (floppy)
+        run: bash scripts/smoke_test.sh floppy
