@@ -26,3 +26,6 @@ jobs:
 
       - name: Boot smoke test (floppy)
         run: bash scripts/smoke_test.sh floppy
+
+      - name: Build + smoke test 32-bit lite (floppy + metal)
+        run: ./koel test --arch 32 --target all
