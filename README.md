@@ -123,6 +123,29 @@ Note: a floppy-only machine has no IDE/ATA disk, so the storage commands
 Everything else — shell, history, in-RAM `edit`, networking, `alkan`,
 `date`/`uptime`, `clear`/`echo`/`mem`, `reboot`/`shutdown` — works.
 
+### 32-bit build (for pre-2004 / non-64-bit CPUs)
+
+The main KoelOS kernel is 64-bit and needs a long-mode CPU. For older boards
+(Pentium 4, Athlon XP, etc. — anything 386+ without 64-bit), there's a separate
+**32-bit "lite" kernel** ([kernel32.asm](kernel32.asm)): it boots in 32-bit
+protected mode to a shell with VGA, serial, keyboard, the CMOS clock, and a
+handful of commands (`help`, `ver`, `clear`, `echo`, `date`, `uptime`,
+`reboot`). No networking / filesystem / `alkan` — those stay 64-bit.
+
+### `koel` — one build tool for both
+
+```bash
+./koel build --arch 32 --target floppy   # 1.44 MB image for a 32-bit board
+./koel run   --arch 32                    # boot it (defaults to an emulated 32-bit CPU)
+./koel run   --arch 64 --target metal     # the full 64-bit OS
+./koel test  --arch 32 --target all       # headless smoke test
+./koel list                               # show the build matrix
+```
+
+`koel` builds, runs, and smoke-tests every arch × target combination. `run`/`test`
+default to a 32-bit QEMU CPU for `--arch 32` (so it's actually exercised the way
+real hardware would), and a 64-bit CPU for `--arch 64`.
+
 Build and launch the VirtualBox target:
 
 ```bash
