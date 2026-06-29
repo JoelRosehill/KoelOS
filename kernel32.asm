@@ -602,6 +602,7 @@ command_table:
     dd cmd_binwrite, do_binwrite
     dd cmd_edit,     do_edit
     dd cmd_format,   do_format
+    dd cmd_alkan,    do_alkan
     dd 0, 0
 
 cmd_help     db "help", 0
@@ -621,6 +622,7 @@ cmd_hex      db "hex", 0
 cmd_binwrite db "binwrite", 0
 cmd_edit     db "edit", 0
 cmd_format   db "format", 0
+cmd_alkan    db "alkan", 0
 
 cursor_pos    dd 0xb8000
 current_color db 0x1F
@@ -661,3 +663,6 @@ input_buffer times 256 db 0
 
 ; --- 32-bit filesystem (ATA PIO + KFS1) and file commands ---
 %include "fs32.asm"
+
+; --- 32-bit Alkan BASIC interpreter ---
+%include "alkan32.asm"
