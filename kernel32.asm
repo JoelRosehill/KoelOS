@@ -1,11 +1,12 @@
-; kernel32.asm — KoelOS 32-bit "lite" kernel
+; kernel32.asm — KoelOS 32-bit kernel
 ; ============================================================================
 ; Runs in 32-bit protected mode with flat 4 GB segments (set up by the
 ; boot_*32 loaders) at 0x10000. Self-contained: VGA text console, COM1 serial
-; mirror, PS/2 keyboard, CMOS RTC, a polling shell, and a handful of commands.
+; mirror, PS/2 keyboard, CMOS RTC, polling shell, the KFS1 filesystem
+; (%include fs32.asm) and the Alkan language (%include alkan32.asm).
 ;
-; No networking / filesystem / alkan — those are the 64-bit kernel. This build
-; exists so KoelOS runs on pre-2004 boards whose CPUs have no 64-bit long mode.
+; Full KoelOS feature set minus networking, so it runs on pre-2004 boards whose
+; CPUs have no 64-bit long mode.
 ; ============================================================================
 [bits 32]
 [org 0x10000]
@@ -132,7 +133,7 @@ do_ver:
     call print_string
     call newline
     jmp command_done
-.msg db "KoelOS v1.6.0 (32-bit)", 0
+.msg db "KoelOS v1.7.0 (32-bit)", 0
 
 do_clear:
     call clear_screen
@@ -704,7 +705,7 @@ rtc_year  db 0
 boot_seconds dd 0
 up_rem       dd 0
 
-msg_welcome db "KoelOS v1.6 (32-bit)", 0
+msg_welcome db "KoelOS v1.7 (32-bit)", 0
 msg_prompt  db "root@koelos> ", 0
 msg_unknown db "Error: Unknown command.", 0
 

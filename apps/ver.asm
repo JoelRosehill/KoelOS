@@ -6,4 +6,4 @@ do_ver:
     call newline
     jmp command_done
 
-.msg db "KoelOS v1.6.0", 0
+.msg db "KoelOS v1.7.0", 0
