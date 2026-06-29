@@ -7,8 +7,9 @@
 ## Build And Verify
 - `bash build_metal.sh` is the fastest full compile check. It regenerates `build/generated_apps.asm`, writes NASM errors to `build/build.log`, and produces `dist/metal/boot.bin`, `dist/metal/kernel.bin`, and `dist/metal/koelOS-metal.img`.
 - `bash build_vbox.sh` is the end-to-end verification path. It rebuilds the metal image, converts it to `dist/vbox/KoelOS.vdi`, then launches through `launch_koelos_vdi.sh`.
-- `bash run_qemu.sh` is the fastest end-to-end check: it rebuilds the metal image and boots it in QEMU with the console mirrored to `-serial stdio`. Flags: `--no-build`, `--gdb` (gdb stub on :1234), `--headless`, `--debug-exit`.
-- `bash scripts/smoke_test.sh` boots the image headless in QEMU and asserts the serial log reaches the `root@koelos>` shell prompt. This is what `.github/workflows/ci.yml` runs after `build_metal.sh` on every push/PR.
+- `bash run_qemu.sh` is the fastest end-to-end check: it rebuilds the metal image and boots it in QEMU with the console mirrored to `-serial stdio`. Flags: `--floppy` (boot the 1.44 MB floppy image), `--no-build`, `--gdb` (gdb stub on :1234), `--headless`, `--debug-exit`.
+- `bash build_floppy.sh` builds a floppy-bootable image (`dist/floppy/koelOS-floppy.img`). It reuses `build_metal.sh` to compile the kernel, then assembles `boot_floppy.asm` and lays out a 2880-sector image.
+- `bash scripts/smoke_test.sh [metal|floppy]` boots the image headless in QEMU and asserts the serial log reaches the `root@koelos>` shell prompt. `.github/workflows/ci.yml` runs both modes on every push/PR.
 - `bash launch_koelos_vdi.sh` relaunches an existing VDI without rebuilding. Use it when debugging VirtualBox behavior rather than the OS build itself.
 - Verification here is build success plus a boot check (the QEMU smoke test, or a manual boot). There is no lint/typecheck/package-manager step.
 - The console is mirrored to COM1 by `drivers/serial.asm` (via `print_char`/`newline`), so serial logs reflect on-screen output. KoelOS does not read input from serial; drive the shell via the keyboard (or QEMU monitor `sendkey`).
@@ -16,7 +17,9 @@
 
 ## Assembly Wiring
 - `boot.asm` is a 16-bit BIOS boot sector. `build_metal.sh` compiles it with `-d KERNEL_SECTORS=...` based on the current `kernel.bin` size; do not compile `boot.asm` separately with a guessed sector count.
-- `boot.bin` must stay exactly 512 bytes.
+- `boot_floppy.asm` is the floppy boot sector (`build_floppy.sh`). It loads the kernel via CHS (INT 13h AH=02h, 1.44 MB geometry: 18 spt, 2 heads) with retries + controller reset, and has a FAT BPB header so `start:` lives at offset `0x3E`. It mirrors `boot.asm`'s paging/long-mode/GDT block — if you change that block in `boot.asm`, mirror it here. Critical: it sets `ES=KERNEL_LOAD_SEG` for the CHS reads and **must reset `ES=0` before the `rep stosd`** page-table zero (that string op uses ES:DI in 16-bit mode; otherwise it wipes the loaded kernel at `0x11000`).
+- Both `boot.bin` and `boot_floppy.bin` must stay exactly 512 bytes (the build scripts assert this).
+- The floppy build is boot-only: `drivers/fs.asm` uses the IDE/ATA controller, which a floppy-only machine lacks, so storage commands report `[FS] Storage I/O error`. This is expected, not a regression.
 - `build_metal.sh` hard-fails once `kernel.bin` exceeds `MAX_KERNEL_SECTORS=127`; increasing kernel size past that requires expanding the bootloader load window, not just retrying the build.
 - This is a flat `-f bin` image, so every `times N db 0` buffer is written into `kernel.bin` and costs sectors. Large scratch buffers therefore live in identity-mapped RAM instead of the binary: `fs_dir_buffer` (`equ 0x301000`), command history (`HISTORY_BASE 0x300000`), and the editor text (`EDIT_TEXT 0x308000`). Boot paging maps the low 4GB, and the bump heap only reaches ~`0x210000`, so `0x300000+` is free. Add new big buffers the same way rather than reserving them in-image.
 - `kernel.asm` is the 64-bit entrypoint at `0x10000`. It includes `helpers.asm` plus the generated `build/generated_apps.asm`.

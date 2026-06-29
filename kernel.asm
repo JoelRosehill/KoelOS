@@ -314,7 +314,7 @@ fs_dir_buffer    equ 0x301000   ; 8KB directory cache in scratch RAM (kept out o
 fs_parse_buffer  times 256 db 0
 
 ; --- SYSTEM MESSAGES ---
-msg_welcome   db "KoelOS v1.5", 0
+msg_welcome   db "KoelOS v1.6", 0
 msg_prompt    db "root@koelos> ", 0
 msg_unknown   db "Error: Unknown command.", 0
 
