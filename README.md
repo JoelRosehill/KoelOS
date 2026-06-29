@@ -74,10 +74,14 @@ ifconfig
 Everything goes through one script: [build.sh](build.sh).
 
 ```bash
-./build.sh                       # 64-bit floppy image (the default)
-./build.sh --run                 # build, then boot in QEMU (serial on stdio)
+./build.sh                       # no arguments -> interactive menu (a GUI on macOS)
+./build.sh --run                 # build the default (64-bit floppy), boot in QEMU
 ./build.sh --target metal --run  # the full 64-bit OS from a hard-disk image
 ```
+
+Run it with **no arguments** and it pops up a menu (a native dialog on macOS, a
+text menu elsewhere) to pick arch, target, and action. Pass any flag to skip the
+menu and go straight to building.
 
 ### The build matrix
 
