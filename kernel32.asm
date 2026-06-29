@@ -585,22 +585,42 @@ rtc_capture_boot:
 ; Command table + data
 ; ============================================================================
 command_table:
-    dd cmd_help,   do_help
-    dd cmd_ver,    do_ver
-    dd cmd_clear,  do_clear
-    dd cmd_echo,   do_echo
-    dd cmd_date,   do_date
-    dd cmd_uptime, do_uptime
-    dd cmd_reboot, do_reboot
+    dd cmd_help,     do_help
+    dd cmd_ver,      do_ver
+    dd cmd_clear,    do_clear
+    dd cmd_echo,     do_echo
+    dd cmd_date,     do_date
+    dd cmd_uptime,   do_uptime
+    dd cmd_reboot,   do_reboot
+    dd cmd_ls,       do_ls
+    dd cmd_cat,      do_cat
+    dd cmd_mkfile,   do_mkfile
+    dd cmd_rm,       do_rm
+    dd cmd_cp,       do_cp
+    dd cmd_mv,       do_mv
+    dd cmd_hex,      do_hex
+    dd cmd_binwrite, do_binwrite
+    dd cmd_edit,     do_edit
+    dd cmd_format,   do_format
     dd 0, 0
 
-cmd_help   db "help", 0
-cmd_ver    db "ver", 0
-cmd_clear  db "clear", 0
-cmd_echo   db "echo", 0
-cmd_date   db "date", 0
-cmd_uptime db "uptime", 0
-cmd_reboot db "reboot", 0
+cmd_help     db "help", 0
+cmd_ver      db "ver", 0
+cmd_clear    db "clear", 0
+cmd_echo     db "echo", 0
+cmd_date     db "date", 0
+cmd_uptime   db "uptime", 0
+cmd_reboot   db "reboot", 0
+cmd_ls       db "ls", 0
+cmd_cat      db "cat", 0
+cmd_mkfile   db "mkfile", 0
+cmd_rm       db "rm", 0
+cmd_cp       db "cp", 0
+cmd_mv       db "mv", 0
+cmd_hex      db "hex", 0
+cmd_binwrite db "binwrite", 0
+cmd_edit     db "edit", 0
+cmd_format   db "format", 0
 
 cursor_pos    dd 0xb8000
 current_color db 0x1F
@@ -638,3 +658,6 @@ keymap_shift:
     times 128 db 0
 
 input_buffer times 256 db 0
+
+; --- 32-bit filesystem (ATA PIO + KFS1) and file commands ---
+%include "fs32.asm"
