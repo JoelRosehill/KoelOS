@@ -105,6 +105,19 @@ start:
     xor ax, ax
     mov es, ax
 
+    ; [1b] Verify the CPU supports 64-bit long mode. KoelOS is a 64-bit OS;
+    ; on a 32-bit CPU (common on pre-2004 boards) the long-mode switch below
+    ; would triple-fault and hang, so fail loudly with a readable message.
+    ; (Any Pentium-class CPU has CPUID, so we test the long-mode bit directly.)
+    mov eax, 0x80000000          ; extended CPUID leaves present?
+    cpuid
+    cmp eax, 0x80000001
+    jb no_long
+    mov eax, 0x80000001          ; long-mode bit = CPUID.80000001h:EDX[29]
+    cpuid
+    test edx, 0x20000000
+    jz no_long
+
     ; [2] Prepare Paging (The 4GB Identity Map - Ultra Compatible)
     cli
 
@@ -150,7 +163,29 @@ start:
     jmp 0x08:init_64
 
 disk_error:
-    jmp $
+    mov si, msg_disk
+    jmp print16_hang
+
+no_long:
+    mov si, msg_no64
+    ; fall through
+
+; Print ASCIIZ at DS:SI via BIOS teletype (INT 10h), then halt forever.
+print16_hang:
+    mov bx, 0x0007
+.loop:
+    lodsb
+    test al, al
+    jz .hang
+    mov ah, 0x0E
+    int 0x10
+    jmp .loop
+.hang:
+    hlt
+    jmp .hang
+
+msg_disk db "KoelOS: FD read error", 13, 10, 0
+msg_no64 db "KoelOS needs a 64-bit CPU", 13, 10, 0
 
 ; --- 64-BIT GDT ---
 gdt_start:
