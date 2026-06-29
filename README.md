@@ -61,58 +61,61 @@ ifconfig
 │   ├── metal/      # raw BIOS disk image and binaries
 │   └── vbox/       # VirtualBox disk image
 ├── docs/
-├── launch_koelos_vdi.sh  # portable VirtualBox launcher for a local VDI copy
-├── boot.asm        # boot sector + transition to long mode
-├── kernel.asm      # shell entry point and global state
-├── build_metal.sh  # build a raw BIOS disk image for real hardware
-└── build_vbox.sh   # build and launch the VirtualBox target
+├── boot.asm        # 64-bit HDD boot sector (LBA, long mode)
+├── boot_floppy.asm # 64-bit floppy boot sector (CHS, long mode)
+├── boot_metal32.asm / boot_floppy32.asm  # 32-bit boot sectors (protected mode)
+├── kernel.asm      # 64-bit kernel: shell entry point and global state
+├── kernel32.asm    # 32-bit "lite" kernel (for non-64-bit CPUs)
+└── build.sh        # the build tool (32/64, floppy/metal, run/test/write/vdi)
 ```
 
 ## Quick Start
 
-### Run in QEMU (fastest dev loop)
+Everything goes through one script: [build.sh](build.sh).
 
 ```bash
-bash run_qemu.sh
+./build.sh                       # 64-bit floppy image (the default)
+./build.sh --run                 # build, then boot in QEMU (serial on stdio)
+./build.sh --target metal --run  # the full 64-bit OS from a hard-disk image
 ```
 
-This builds the metal image and boots it in QEMU with the console mirrored to
-the serial line (`-serial stdio`). No VDI conversion, instant boot, and the same
-Intel 82540EM NIC as VirtualBox so the network stack still works. Useful flags:
+### The build matrix
+
+| `--arch` | `--target` | Image | Notes |
+| --- | --- | --- | --- |
+| `64` (default) | `floppy` (default) | `dist/floppy/koelOS-floppy.img` | full OS, needs a 64-bit CPU |
+| `64` | `metal` | `dist/metal/koelOS-metal.img` | full OS, needs a 64-bit CPU |
+| `32` | `floppy` | `dist/floppy32/koelOS32-floppy.img` | lite shell, any 386+ |
+| `32` | `metal` | `dist/metal32/koelOS32-metal.img` | lite shell, any 386+ |
+
+### Flags
 
 ```bash
-bash run_qemu.sh --no-build     # reboot the current image
-bash run_qemu.sh --gdb          # pause at reset, then: gdb -ex 'target remote :1234'
-bash run_qemu.sh --headless     # no window, console only on serial
+./build.sh --arch 32 --target floppy        # 32-bit image for a pre-2004 board
+./build.sh --run                            # boot the result in QEMU
+./build.sh --test                           # headless boot smoke test (used by CI)
+./build.sh --target metal --vdi             # also emit a VirtualBox .vdi
+./build.sh --target floppy --write          # build, then dd to a real floppy (see below)
 ```
 
-A headless boot smoke test (used by CI) lives at `scripts/smoke_test.sh`.
-
-### Build the bare-metal image
-
-```bash
-bash build_metal.sh
-```
-
-Output:
-
-```text
-dist/metal/koelOS-metal.img
-```
+`--run` / `--test` pick the QEMU CPU automatically: a 64-bit CPU for `--arch 64`,
+an emulated 32-bit CPU for `--arch 32` (so the lite kernel is exercised the way
+real old hardware would). Override with `--cpu MODEL`.
 
 ### Boot from a floppy
 
-KoelOS can boot off a real 1.44 MB floppy (or USB-FDD). The floppy bootloader
-([boot_floppy.asm](boot_floppy.asm)) loads the kernel with classic **CHS reads**
-(INT 13h AH=02h) instead of the LBA/EDD read used by the hard-disk boot, and
-carries a FAT-style BPB header for BIOS compatibility.
+KoelOS boots off a real 1.44 MB floppy (or USB-FDD). The floppy bootloaders load
+the kernel with classic **CHS reads** (INT 13h AH=02h) instead of the LBA/EDD
+read used by the hard-disk boot, and carry a FAT-style BPB header for BIOS
+compatibility.
 
 ```bash
-bash build_floppy.sh            # -> dist/floppy/koelOS-floppy.img (1,474,560 bytes)
-bash run_qemu.sh --floppy       # build + boot the floppy in QEMU
+./build.sh --target floppy --write          # auto-detects a 1.44 MB disk, confirms, writes
+./build.sh --target floppy --write /dev/disk2   # or name the device explicitly
 ```
 
-Flash it to a physical floppy / USB-FDD:
+`--write` unmounts the disk, `dd`s the image (with `sudo`), and ejects. To flash
+by hand instead:
 
 ```bash
 sudo dd if=dist/floppy/koelOS-floppy.img of=/dev/diskN bs=512
@@ -132,65 +135,22 @@ protected mode to a shell with VGA, serial, keyboard, the CMOS clock, and a
 handful of commands (`help`, `ver`, `clear`, `echo`, `date`, `uptime`,
 `reboot`). No networking / filesystem / `alkan` — those stay 64-bit.
 
-### `koel` — one build tool for both
-
 ```bash
-./koel build --arch 32 --target floppy   # 1.44 MB image for a 32-bit board
-./koel run   --arch 32                    # boot it (defaults to an emulated 32-bit CPU)
-./koel run   --arch 64 --target metal     # the full 64-bit OS
-./koel test  --arch 32 --target all       # headless smoke test
-./koel list                               # show the build matrix
+./build.sh --arch 32 --target floppy --write   # build the lite floppy and burn it
 ```
 
 `koel` builds, runs, and smoke-tests every arch × target combination. `run`/`test`
 default to a 32-bit QEMU CPU for `--arch 32` (so it's actually exercised the way
 real hardware would), and a 64-bit CPU for `--arch 64`.
 
-Build and launch the VirtualBox target:
+### VirtualBox
 
 ```bash
-bash build_vbox.sh
+./build.sh --arch 64 --target metal --vdi   # -> dist/metal/KoelOS.vdi
 ```
 
-Output:
-
-```text
-dist/vbox/koelOS.vdi
-```
-
-## Portable VDI Launch
-
-If you just want to run a downloaded `KoelOS.vdi`, use the portable launcher:
-
-```bash
-bash launch_koelos_vdi.sh
-```
-
-It looks for:
-
-- `./KoelOS.vdi`
-- `./koelOS.vdi`
-- `./dist/vbox/KoelOS.vdi`
-- `./dist/vbox/koelOS.vdi`
-
-This means you can drop both files into a folder like `Downloads/` and launch KoelOS directly from there.
-
-The launcher also:
-
-- creates a local VirtualBox VM profile automatically
-- forces the KoelOS-compatible NIC settings
-- uses `NAT`
-- fixes duplicate copied-VDI UUID conflicts automatically
-
-On Linux, VirtualBox `NAT` not showing a host adapter dropdown is normal. That dropdown only appears for `Bridged Adapter` mode.
-
-Recommended pair:
-
-```text
-Downloads/
-├── KoelOS.vdi
-└── launch_koelos_vdi.sh
-```
+Create a VM with an Intel `82540EM` NIC on `NAT` and MAC `52:54:00:12:34:56`
+(the kernel hardcodes that MAC), and attach the `.vdi`.
 
 ## Real Hardware
 
@@ -218,8 +178,7 @@ That means:
 
 - shell boot on real hardware is the target
 - networking on real hardware is not universal yet
-- VirtualBox `NAT` is currently the best-supported environment for the browser and network stack
-- VirtualBox on Linux is now supported with the bundled `launch_koelos_vdi.sh` flow
+- VirtualBox `NAT` (or QEMU user networking) is currently the best-supported environment for the browser and network stack
 
 ## Why It Exists
 

@@ -1,6 +1,6 @@
 # Metal Boot
 
-`build_metal.sh` now produces a BIOS hard-disk image instead of a floppy image.
+`./build.sh --target metal` produces a BIOS hard-disk image.
 
 ## Output Layout
 
@@ -16,7 +16,7 @@
 Run:
 
 ```bash
-bash build_metal.sh
+./build.sh --target metal
 ```
 
 ## Write To USB
