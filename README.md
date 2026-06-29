@@ -134,13 +134,20 @@ Everything else — shell, history, in-RAM `edit`, networking, `alkan`,
 
 The main KoelOS kernel is 64-bit and needs a long-mode CPU. For older boards
 (Pentium 4, Athlon XP, etc. — anything 386+ without 64-bit), there's a separate
-**32-bit "lite" kernel** ([kernel32.asm](kernel32.asm)): it boots in 32-bit
-protected mode to a shell with VGA, serial, keyboard, the CMOS clock, and a
-handful of commands (`help`, `ver`, `clear`, `echo`, `date`, `uptime`,
-`reboot`). No networking / filesystem / `alkan` — those stay 64-bit.
+**32-bit kernel** ([kernel32.asm](kernel32.asm)) that boots in 32-bit protected
+mode. It carries the full KoelOS feature set **except networking**: VGA/serial
+console, PS/2 keyboard, CMOS clock, the KFS1 filesystem ([fs32.asm](fs32.asm):
+`ls`/`cat`/`mkfile`/`rm`/`cp`/`mv`/`hex`/`binwrite`/`format` + the `edit` line
+editor), and the full Alkan language ([alkan32.asm](alkan32.asm)), plus
+`help`/`ver`/`clear`/`echo`/`date`/`uptime`/`reboot`/`shutdown`/`colors`.
+
+The networking stack stays 64-bit only — it is hardcoded for the VirtualBox/QEMU
+Intel 82540EM NIC, so it would not run on a real pre-2004 board's NIC anyway.
+The filesystem needs an IDE/ATA disk; on a floppy-only machine the storage
+commands report `[FS] Storage I/O error`.
 
 ```bash
-./build.sh --arch 32 --target floppy --write   # build the lite floppy and burn it
+./build.sh --arch 32 --target floppy --write   # build the 32-bit floppy and burn it
 ```
 
 `koel` builds, runs, and smoke-tests every arch × target combination. `run`/`test`
